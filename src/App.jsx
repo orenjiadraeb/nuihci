@@ -160,6 +160,24 @@ function isPointingPose(lm) {
   );
 }
 
+function isThumbsUp(lm) {
+  const w = lm[0];
+  const thumbTip = lm[4];
+  const thumbIp = lm[3];
+  const thumbMcp = lm[2];
+  const indexMcp = lm[5];
+
+  const thumbExtendedUp = thumbTip.y < thumbIp.y - 0.04 && thumbTip.y < thumbMcp.y - 0.02;
+  const thumbSeparated = Math.abs(thumbTip.x - indexMcp.x) > 0.03;
+
+  const indexCurled = lm[8].y > lm[6].y + 0.02;
+  const middleCurled = lm[12].y > lm[10].y + 0.02;
+  const ringCurled = lm[16].y > lm[14].y + 0.02;
+  const pinkyCurled = lm[20].y > lm[18].y + 0.02;
+
+  return thumbExtendedUp && thumbSeparated && indexCurled && middleCurled && ringCurled && pinkyCurled;
+}
+
 function facePitch(lm) {
   const nose = lm[1];
   const le = lm[33];
@@ -235,11 +253,12 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [activeField, setActiveField] = useState(null);
   const [pendingField, setPendingField] = useState(null);
-  const [status, setStatus] = useState("Show open palm for username, back of hand for password.");
+  const [status, setStatus] = useState("Controls: Point with one hand to move cursor. Thumbs up with other hand to click.");
   const [handsSeen, setHandsSeen] = useState(0);
   const [recognizedChar, setRecognizedChar] = useState("");
   const [isWriting, setIsWriting] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 });
+  const [isClicking, setIsClicking] = useState(false);
 
   activeFieldRef.current = activeField;
   pendingFieldRef.current = pendingField;
@@ -270,8 +289,10 @@ export default function App() {
     let nodCooldownUntil = 0;
 
     const latestPrimary = { hand: null, handedness: null };
+    let secondaryHand = null;
     let stroke = [];
     let lastStrokeAt = 0;
+    let clickCooldownUntil = 0;
 
     const commitChar = (ch) => {
       if (!ch) return;
@@ -331,8 +352,8 @@ export default function App() {
       setActiveField(field);
       setStatus(
         field === "username"
-          ? "Username selected. Start air-writing letters or numbers."
-          : "Password selected. Start air-writing letters or numbers.",
+          ? "Username active. Point to write. Thumbs up = click."
+          : "Password active. Point to write. Thumbs up = click.",
       );
       if (field === "username") userRef.current?.focus();
       if (field === "password") passRef.current?.focus();
@@ -371,39 +392,36 @@ export default function App() {
       locateFile: (file) => `${MEDIAPIPE_HANDS_BASE}${file}`,
     });
     hands.setOptions({
-      maxNumHands: 1,
+      maxNumHands: 2,
       modelComplexity: 1,
       minDetectionConfidence: 0.65,
       minTrackingConfidence: 0.6,
     });
     hands.onResults((results) => {
       if (disposed) return;
-      const lm = results.multiHandLandmarks?.[0] ?? null;
-      const handed = results.multiHandedness?.[0]?.label ?? null;
-      latestPrimary.hand = lm;
-      latestPrimary.handedness = handed;
-      setHandsSeen(results.multiHandLandmarks?.length ?? 0);
+      const handsCount = results.multiHandLandmarks?.length ?? 0;
+      setHandsSeen(handsCount);
 
       const now = performance.now();
-      if (!lm) {
-        maybeFinalizeStroke(now);
-        drawOverlay();
-        return;
+
+      let pointingHand = null;
+      let clickHand = null;
+
+      for (let i = 0; i < handsCount; i++) {
+        const lm = results.multiHandLandmarks[i];
+        if (isPointingPose(lm)) {
+          pointingHand = lm;
+        } else if (isThumbsUp(lm)) {
+          clickHand = lm;
+        }
       }
 
-      const open = isOpenPalm(lm);
-      const side = palmFacing(lm);
-      if (open && side === "palm" && pendingFieldRef.current !== "username") {
-        setPendingField("username");
-        setStatus("Open palm detected: nod to confirm USERNAME field.");
-      } else if (open && side === "back" && pendingFieldRef.current !== "password") {
-        setPendingField("password");
-        setStatus("Back of hand detected: nod to confirm PASSWORD field.");
-      }
+      latestPrimary.hand = pointingHand;
+      secondaryHand = clickHand;
 
-      if (isPointingPose(lm)) {
-        const tipX = 1 - lm[INDEX_TIP].x;
-        const tipY = lm[INDEX_TIP].y;
+      if (pointingHand) {
+        const tipX = 1 - pointingHand[INDEX_TIP].x;
+        const tipY = pointingHand[INDEX_TIP].y;
         setCursorPos({ x: tipX * 100, y: tipY * 100 });
         if (activeFieldRef.current) {
           stroke.push({ x: tipX, y: tipY });
@@ -411,9 +429,59 @@ export default function App() {
           lastStrokeAt = now;
           setIsWriting(true);
         }
+
+        if (clickHand && now >= clickCooldownUntil) {
+          setIsClicking(true);
+          clickCooldownUntil = now + 500;
+          setTimeout(() => setIsClicking(false), 200);
+
+          const screenX = tipX * window.innerWidth;
+          const screenY = tipY * window.innerHeight;
+          const element = document.elementFromPoint(screenX, screenY);
+
+          if (element) {
+            const mousedown = new MouseEvent("mousedown", {
+              bubbles: true,
+              cancelable: true,
+              clientX: screenX,
+              clientY: screenY,
+            });
+            const mouseup = new MouseEvent("mouseup", {
+              bubbles: true,
+              cancelable: true,
+              clientX: screenX,
+              clientY: screenY,
+            });
+            const click = new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              clientX: screenX,
+              clientY: screenY,
+            });
+            element.dispatchEvent(mousedown);
+            element.dispatchEvent(mouseup);
+            element.dispatchEvent(click);
+            element.focus?.();
+            setStatus(`Clicked: ${element.tagName.toLowerCase()}${element.id ? "#" + element.id : ""}`);
+          }
+        }
       } else {
         maybeFinalizeStroke(now);
       }
+
+      if (!pointingHand && handsCount > 0) {
+        const lm = results.multiHandLandmarks[0];
+        const open = isOpenPalm(lm);
+        const side = palmFacing(lm);
+        if (open && side === "palm" && pendingFieldRef.current !== "username") {
+          setPendingField("username");
+          setStatus("Open palm = Username field. Nod to confirm.");
+        } else if (open && side === "back" && pendingFieldRef.current !== "password") {
+          setPendingField("password");
+          setStatus("Back of hand = Password field. Nod to confirm.");
+        }
+      }
+
       drawOverlay();
     });
 
@@ -497,9 +565,10 @@ export default function App() {
 
         <p className="status">{status}</p>
         <p className="meta">
-          {handsSeen > 0 ? "Hand tracked" : "Waiting for hand"} |{" "}
+          {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"} |{" "}
           {pendingField ? `pending: ${pendingField}` : `active: ${activeField ?? "none"}`}
           {isWriting ? " | writing..." : ""}
+          {isClicking ? " | CLICK!" : ""}
           {recognizedChar ? ` | detected: ${recognizedChar}` : ""}
         </p>
       </section>
@@ -510,7 +579,7 @@ export default function App() {
       </div>
 
       <div
-        className="cursor-follower"
+        className={`cursor-follower${isClicking ? " clicking" : ""}`}
         style={{
           left: `${cursorPos.x}%`,
           top: `${cursorPos.y}%`,
