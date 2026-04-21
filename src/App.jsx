@@ -125,6 +125,7 @@ export default function App() {
   const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 });
   const [isClicking, setIsClicking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [showCamera, setShowCamera] = useState(true);
 
   const recognitionRef = useRef(null);
   const mouthGestureRef = useRef({ active: false, since: 0 });
@@ -514,9 +515,12 @@ export default function App() {
         </p>
       </section>
 
-      <div className="camera-pane" aria-label="Gesture camera">
+      <div className={`camera-pane${showCamera ? "" : " camera-pane--hidden"}`} aria-label="Gesture camera">
         <video ref={videoRef} autoPlay playsInline muted />
         <canvas ref={canvasRef} />
+        <button className="camera-toggle" onClick={() => setShowCamera(!showCamera)} aria-label={showCamera ? "Hide camera" : "Show camera"}>
+          {showCamera ? "✕" : "self camera"}
+        </button>
       </div>
 
       <div
