@@ -336,29 +336,38 @@ export default function App() {
           const element = document.elementFromPoint(screenX, screenY);
 
           if (element) {
-            const mousedown = new MouseEvent("mousedown", {
-              bubbles: true,
-              cancelable: true,
-              clientX: screenX,
-              clientY: screenY,
-            });
-            const mouseup = new MouseEvent("mouseup", {
-              bubbles: true,
-              cancelable: true,
-              clientX: screenX,
-              clientY: screenY,
-            });
-            const click = new MouseEvent("click", {
-              bubbles: true,
-              cancelable: true,
-              clientX: screenX,
-              clientY: screenY,
-            });
-            element.dispatchEvent(mousedown);
-            element.dispatchEvent(mouseup);
-            element.dispatchEvent(click);
-            element.focus?.();
-            setStatus(`Clicked: ${element.tagName.toLowerCase()}${element.id ? "#" + element.id : ""}`);
+            let targetElement = element;
+            let buttonElement = element.closest("button");
+
+            if (buttonElement) {
+              targetElement = buttonElement;
+              buttonElement.click();
+              setStatus(`Clicked: ${buttonElement.textContent.trim()}`);
+            } else {
+              const mousedown = new MouseEvent("mousedown", {
+                bubbles: true,
+                cancelable: true,
+                clientX: screenX,
+                clientY: screenY,
+              });
+              const mouseup = new MouseEvent("mouseup", {
+                bubbles: true,
+                cancelable: true,
+                clientX: screenX,
+                clientY: screenY,
+              });
+              const click = new MouseEvent("click", {
+                bubbles: true,
+                cancelable: true,
+                clientX: screenX,
+                clientY: screenY,
+              });
+              element.dispatchEvent(mousedown);
+              element.dispatchEvent(mouseup);
+              element.dispatchEvent(click);
+              element.focus?.();
+              setStatus(`Clicked: ${element.tagName.toLowerCase()}${element.id ? "#" + element.id : ""}`);
+            }
           }
         }
       }
