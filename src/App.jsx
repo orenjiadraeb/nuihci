@@ -22,6 +22,9 @@ const MAX_FIELD_LENGTH = 24;
 
 const ALPHANUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+const ADMIN_USER = "OLDBUTGOLD";
+const ADMIN_PASS = "admin";
+
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -236,9 +239,18 @@ export default function App() {
   const [handsSeen, setHandsSeen] = useState(0);
   const [recognizedChar, setRecognizedChar] = useState("");
   const [isWriting, setIsWriting] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 });
 
   activeFieldRef.current = activeField;
   pendingFieldRef.current = pendingField;
+
+  const handleLogin = () => {
+    if (username.toUpperCase() === ADMIN_USER && password === ADMIN_PASS) {
+      setStatus("Login successful! Welcome, admin.");
+    } else {
+      setStatus("Invalid credentials. Try: OldButGold / admin");
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -300,18 +312,6 @@ export default function App() {
       ctx.save();
       ctx.scale(-1, 1);
       ctx.translate(-cw, 0);
-      if (latestPrimary.hand) {
-        ctx.strokeStyle = "rgba(255,255,255,0.75)";
-        ctx.lineWidth = 2;
-        for (const [a, b] of HAND_CONNECTIONS || []) {
-          const A = latestPrimary.hand[a];
-          const B = latestPrimary.hand[b];
-          ctx.beginPath();
-          ctx.moveTo(A.x * cw, A.y * ch);
-          ctx.lineTo(B.x * cw, B.y * ch);
-          ctx.stroke();
-        }
-      }
       if (stroke.length > 1) {
         ctx.strokeStyle = "rgba(129, 140, 248, 0.95)";
         ctx.lineWidth = 4;
@@ -401,11 +401,16 @@ export default function App() {
         setStatus("Back of hand detected: nod to confirm PASSWORD field.");
       }
 
-      if (activeFieldRef.current && isPointingPose(lm)) {
-        stroke.push({ x: lm[INDEX_TIP].x, y: lm[INDEX_TIP].y });
-        if (stroke.length > 180) stroke.shift();
-        lastStrokeAt = now;
-        setIsWriting(true);
+      if (isPointingPose(lm)) {
+        const tipX = 1 - lm[INDEX_TIP].x;
+        const tipY = lm[INDEX_TIP].y;
+        setCursorPos({ x: tipX * 100, y: tipY * 100 });
+        if (activeFieldRef.current) {
+          stroke.push({ x: tipX, y: tipY });
+          if (stroke.length > 180) stroke.shift();
+          lastStrokeAt = now;
+          setIsWriting(true);
+        }
       } else {
         maybeFinalizeStroke(now);
       }
@@ -479,15 +484,15 @@ export default function App() {
               ref={passRef}
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value.toUpperCase().slice(0, MAX_FIELD_LENGTH))}
+              onChange={(e) => setPassword(e.target.value.slice(0, MAX_FIELD_LENGTH))}
               placeholder="AIR-WRITE PASSWORD"
             />
           </label>
         </div>
 
         <div className="actions">
-          <button type="button">SIGN UP</button>
-          <button type="button">LOGIN</button>
+          <button type="button" onClick={() => setStatus("Sign up not implemented.")}>SIGN UP</button>
+          <button type="button" onClick={handleLogin}>LOGIN</button>
         </div>
 
         <p className="status">{status}</p>
@@ -503,6 +508,15 @@ export default function App() {
         <video ref={videoRef} autoPlay playsInline muted />
         <canvas ref={canvasRef} />
       </div>
+
+      <div
+        className="cursor-follower"
+        style={{
+          left: `${cursorPos.x}%`,
+          top: `${cursorPos.y}%`,
+          opacity: handsSeen > 0 && isWriting ? 1 : handsSeen > 0 ? 0.7 : 0,
+        }}
+      />
     </main>
   );
 }
