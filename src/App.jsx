@@ -191,6 +191,7 @@ export default function App() {
   const cameraInputRef = useRef(null);
   const mouthGestureRef = useRef({ active: false, since: 0 });
   const isListeningRef = useRef(false);
+  const isLoggedInRef = useRef(isLoggedIn);
   const ttsEnabledRef = useRef(ttsEnabled);
   const lastSpokenRef = useRef({ text: "", at: 0 });
   const hoverSpeakRef = useRef({ text: "", at: 0, element: null });
@@ -218,6 +219,10 @@ export default function App() {
   }, [isListening]);
 
   useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
+
+  useEffect(() => {
     ttsEnabledRef.current = ttsEnabled;
   }, [ttsEnabled]);
 
@@ -238,6 +243,8 @@ export default function App() {
     if (currentUsername === ADMIN_USER && currentPassword === ADMIN_PASS) {
       setStatus("Login successful! Welcome, admin.");
       setIsLoggedIn(true);
+      setActiveField(null);
+      setPendingField(null);
       setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
       speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
     } else {
@@ -451,6 +458,7 @@ export default function App() {
       };
 
       recognitionRef.current.onresult = (event) => {
+        if (isLoggedInRef.current) return;
         const results = event.results;
         if (results.length > 0) {
           const lastResult = results[results.length - 1];
@@ -561,7 +569,7 @@ export default function App() {
         const hoveredElement = document.elementFromPoint(hoverX, hoverY);
         speakHoveredElement(hoveredElement);
 
-        const speechGesture = activeFieldRef.current && isIndexPointingUp(pointingHand);
+        const speechGesture = !isLoggedInRef.current && activeFieldRef.current && isIndexPointingUp(pointingHand);
         if (speechGesture) {
           if (!mouthGestureRef.current.active) {
             mouthGestureRef.current = { active: true, since: now };
