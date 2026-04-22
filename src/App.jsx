@@ -187,14 +187,22 @@ export default function App() {
   ]);
 
   const recognitionRef = useRef(null);
+  const uploadInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const mouthGestureRef = useRef({ active: false, since: 0 });
   const isListeningRef = useRef(false);
   const ttsEnabledRef = useRef(ttsEnabled);
+  const lastSpokenRef = useRef({ text: "", at: 0 });
 
   const speak = (text) => {
     if (!ttsEnabledRef.current || !window.speechSynthesis) return;
+    const cleanText = String(text || "").trim();
+    if (!cleanText) return;
+    const now = Date.now();
+    if (lastSpokenRef.current.text === cleanText && now - lastSpokenRef.current.at < 800) return;
+    lastSpokenRef.current = { text: cleanText, at: now };
     try {
-      const msg = new SpeechSynthesisUtterance(text);
+      const msg = new SpeechSynthesisUtterance(cleanText);
       msg.lang = "en-US";
       msg.rate = 1;
       window.speechSynthesis.cancel();
@@ -247,6 +255,50 @@ export default function App() {
 
   const updateProfileField = (key, value) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateProfilePictureFromFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setStatus("Please select an image file.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageData = String(reader.result || "");
+      if (!imageData) return;
+      setProfile((prev) => ({ ...prev, picture: imageData }));
+      setStatus("Profile picture updated.");
+      speak("Profile picture updated.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const getTextToRead = (element) => {
+    if (!element) return "";
+    const explicit = element.getAttribute("data-tts");
+    if (explicit) return explicit;
+    const aria = element.getAttribute("aria-label");
+    if (aria) return aria;
+    if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+      const labelText = element.closest("label")?.querySelector("span")?.textContent?.trim();
+      const fallback = element.placeholder?.trim();
+      return [labelText, fallback].filter(Boolean).join(". ");
+    }
+    if (element.tagName === "SELECT") {
+      const labelText = element.closest("label")?.querySelector("span")?.textContent?.trim();
+      return labelText || "Status selection";
+    }
+    return element.textContent?.trim() || "";
+  };
+
+  const handleSpeakFromEvent = (event) => {
+    if (!ttsEnabledRef.current) return;
+    const target = event.target.closest(
+      "[data-tts], button, input, textarea, select, label, h1, h2, h3, p, span, li, strong, em",
+    );
+    const text = getTextToRead(target);
+    if (text) speak(text);
   };
 
   const addFriend = () => {
@@ -643,7 +695,12 @@ export default function App() {
   }, []);
 
   return (
-    <main className="nyoui-screen">
+    <main
+      className="nyoui-screen"
+      onMouseOver={handleSpeakFromEvent}
+      onFocusCapture={handleSpeakFromEvent}
+      onClickCapture={handleSpeakFromEvent}
+    >
       <div className="ambient ambient--one" />
       <div className="ambient ambient--two" />
       <div className="ambient ambient--three" />
@@ -702,6 +759,39 @@ export default function App() {
                   placeholder="Biography"
                   aria-label="Profile biography"
                 />
+                <div className="profile-media-actions">
+                  <button
+                    type="button"
+                    onClick={() => uploadInputRef.current?.click()}
+                    data-tts="Upload profile picture"
+                  >
+                    Upload Picture
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    data-tts="Take profile picture"
+                  >
+                    Take Picture
+                  </button>
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
+                    className="profile-file-input"
+                    aria-label="Upload profile picture file"
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="user"
+                    onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
+                    className="profile-file-input"
+                    aria-label="Take profile picture using camera"
+                  />
+                </div>
                 <select
                   value={profile.status}
                   onChange={(e) => updateProfileField("status", e.target.value)}

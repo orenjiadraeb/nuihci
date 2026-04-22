@@ -1,12 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap");
+
 .nyoui-screen {
   position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: radial-gradient(circle at 20% 20%, #6068f7 0%, #4e57e4 42%, #424cd0 100%);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(89, 185, 255, 0.22), transparent 33%),
+    radial-gradient(circle at 92% 85%, rgba(168, 132, 255, 0.2), transparent 37%),
+    radial-gradient(circle at 20% 20%, #5d66ef 0%, #4a54dd 42%, #3f49c8 100%);
   color: #ffffff;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .ambient {
@@ -355,8 +360,14 @@
 
 .dashboard {
   z-index: 2;
-  width: min(96vw, 1200px);
+  width: min(95vw, 1220px);
   color: #fff;
+  font-size: 16px;
+  padding: 20px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(24, 33, 113, 0.24), rgba(12, 21, 94, 0.18));
+  border: 1px solid rgba(173, 208, 255, 0.18);
+  box-shadow: 0 22px 44px rgba(19, 29, 106, 0.28);
 }
 
 .dashboard-top {
@@ -364,17 +375,18 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .dashboard-top h2 {
   margin: 0;
-  font-size: clamp(26px, 3.2vw, 40px);
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: clamp(28px, 3vw, 38px);
 }
 
 .small {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   opacity: 0.86;
 }
 
@@ -401,15 +413,17 @@
 }
 
 .controls-panel {
-  margin-bottom: 14px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 2px solid rgba(255, 255, 255, 0.45);
-  border-radius: 12px;
-  padding: 12px;
+  margin-bottom: 16px;
+  background: linear-gradient(115deg, rgba(90, 186, 255, 0.15), rgba(167, 138, 255, 0.15));
+  border: 1px solid rgba(190, 224, 255, 0.5);
+  border-radius: 14px;
+  padding: 14px 16px;
 }
 
 .controls-panel h3 {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 20px;
 }
 
 .toggle {
@@ -421,7 +435,7 @@
 .dashboard-grid {
   display: grid;
   grid-template-columns: 340px 1fr;
-  gap: 14px;
+  gap: 16px;
 }
 
 .left-pane {
@@ -430,15 +444,17 @@
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.12);
-  border: 2px solid rgba(255, 255, 255, 0.42);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.09));
+  border: 1px solid rgba(215, 233, 255, 0.38);
   border-radius: 14px;
-  padding: 14px;
+  padding: 16px;
   backdrop-filter: blur(4px);
 }
 
 .card h3 {
   margin: 0 0 10px;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 20px;
 }
 
 .inline-input {
@@ -454,8 +470,9 @@
   background: rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   color: #fff;
-  padding: 10px;
+  padding: 11px 12px;
   margin-bottom: 8px;
+  font-size: 16px;
 }
 
 .card select {
@@ -465,8 +482,9 @@
   background: rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   color: #fff;
-  padding: 10px;
+  padding: 11px 12px;
   margin-bottom: 8px;
+  font-size: 16px;
 }
 
 .card input::placeholder {
@@ -481,6 +499,17 @@
   object-fit: cover;
   margin: 0 auto 10px;
   display: block;
+}
+
+.profile-media-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.profile-file-input {
+  display: none;
 }
 
 .list {
@@ -499,6 +528,7 @@
   background: rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 8px 10px;
+  font-size: 16px;
 }
 
 .list-open {
@@ -516,7 +546,7 @@
 
 .small-btn {
   padding: 6px 10px !important;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .muted {
@@ -540,8 +570,9 @@
   border: 2px solid rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  padding: 7px 10px;
+  padding: 8px 11px;
   border-radius: 999px;
+  font-size: 14px;
 }
 
 .chat-tab.active {
@@ -566,10 +597,11 @@
   grid-template-columns: auto 1fr auto;
   align-items: baseline;
   gap: 8px;
+  font-size: 16px;
 }
 
 .messages-list em {
-  font-size: 11px;
+  font-size: 13px;
   opacity: 0.8;
 }
 
