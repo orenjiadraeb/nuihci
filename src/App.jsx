@@ -126,6 +126,7 @@ export default function App() {
   const [isClicking, setIsClicking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showCamera, setShowCamera] = useState(true);
+  const [showGuide, setShowGuide] = useState(false);
 
   const recognitionRef = useRef(null);
   const mouthGestureRef = useRef({ active: false, since: 0 });
@@ -502,6 +503,7 @@ export default function App() {
         </div>
 
         <div className="actions">
+          <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
           <button type="button" onClick={() => setStatus("Sign up not implemented.")}>SIGN UP</button>
           <button type="button" onClick={handleLogin}>LOGIN</button>
         </div>
@@ -531,6 +533,41 @@ export default function App() {
           opacity: handsSeen > 0 ? 0.85 : 0,
         }}
       />
+
+      {showGuide && (
+        <div className="guide-overlay" onClick={() => setShowGuide(false)}>
+          <div className="guide-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="guide-close" onClick={() => setShowGuide(false)}>✕</button>
+            <h2>Controls Guide</h2>
+            <div className="guide-content">
+              <div className="guide-item">
+                <strong>Move cursor:</strong> Point index finger anywhere
+              </div>
+              <div className="guide-item">
+                <strong>Click:</strong> Thumbs up with other hand while pointing
+              </div>
+              <div className="guide-item">
+                <strong>Speech-to-text:</strong> Index finger pointing directly up (vertical) when field is active
+              </div>
+              <div className="guide-item">
+                <strong>Delete last char:</strong> Two hands, both open palms facing camera
+              </div>
+              <div className="guide-item">
+                <strong>Login:</strong> Two thumbs up
+              </div>
+              <div className="guide-item">
+                <strong>Select username field:</strong> Show open palm, then nod
+              </div>
+              <div className="guide-item">
+                <strong>Select password field:</strong> Show back of hand, then nod
+              </div>
+              <div className="guide-item">
+                <strong>Click input directly:</strong> Point at input with cursor and thumbs up
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
