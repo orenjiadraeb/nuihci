@@ -127,6 +127,7 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [showCamera, setShowCamera] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const recognitionRef = useRef(null);
   const mouthGestureRef = useRef({ active: false, since: 0 });
@@ -150,9 +151,19 @@ export default function App() {
   const handleLogin = () => {
     if (usernameRef.current.toUpperCase() === ADMIN_USER && passwordRef.current.toLowerCase() === ADMIN_PASS) {
       setStatus("Login successful! Welcome, admin.");
+      setIsLoggedIn(true);
     } else {
       setStatus("User not found. Would you like to sign up?");
     }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUsername("");
+    setPassword("");
+    setActiveField(null);
+    setPendingField(null);
+    setStatus("Logged out.");
   };
 
   useEffect(() => {
@@ -471,51 +482,71 @@ export default function App() {
       <div className="ambient ambient--two" />
       <div className="ambient ambient--three" />
 
-      <section className="login-card">
-        <h1 className="brand">
-          Ny<span>o</span>UI
-        </h1>
+      {isLoggedIn ? (
+        <section className="login-card homescreen">
+          <h1 className="brand">
+            Ny<span>o</span>UI
+          </h1>
+          <h2>Welcome, {username}!</h2>
+          <p className="homescreen-welcome">You have successfully logged in.</p>
+          <div className="actions">
+            <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
+            <button type="button" onClick={handleLogout}>LOGOUT</button>
+          </div>
+          <p className="status">{status}</p>
+          <p className="meta">
+            {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"}
+            {isListening ? " | SPEECH..." : ""}
+            {isClicking ? " | CLICK!" : ""}
+          </p>
+        </section>
+      ) : (
+        <section className="login-card">
+          <h1 className="brand">
+            Ny<span>o</span>UI
+          </h1>
 
-        <div className="fields">
-          <label className={activeField === "username" ? "field active" : "field"}>
-            <span>Username</span>
-            <input
-              ref={userRef}
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value.slice(0, MAX_FIELD_LENGTH))}
-              onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
-              placeholder="SPEECH OR TYPE USERNAME"
-            />
-          </label>
+          <div className="fields">
+            <label className={activeField === "username" ? "field active" : "field"}>
+              <span>Username</span>
+              <input
+                ref={userRef}
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.slice(0, MAX_FIELD_LENGTH))}
+                onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
+                placeholder="SPEECH OR TYPE USERNAME"
+              />
+            </label>
 
-          <label className={activeField === "password" ? "field active" : "field"}>
-            <span>Password</span>
-            <input
-              ref={passRef}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value.slice(0, MAX_FIELD_LENGTH))}
-              onClick={() => { setActiveField("password"); setPendingField(null); setStatus("Password active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
-              placeholder="SPEECH OR TYPE PASSWORD"
-            />
-          </label>
-        </div>
+            <label className={activeField === "password" ? "field active" : "field"}>
+              <span>Password</span>
+              <input
+                ref={passRef}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value.slice(0, MAX_FIELD_LENGTH))}
+                onClick={() => { setActiveField("password"); setPendingField(null); setStatus("Password active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
+                placeholder="SPEECH OR TYPE PASSWORD"
+              />
+            </label>
+          </div>
 
-        <div className="actions">
-          <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
-          <button type="button" onClick={() => setStatus("Sign up not implemented.")}>SIGN UP</button>
-          <button type="button" onClick={handleLogin}>LOGIN</button>
-        </div>
+          <div className="actions">
+            <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
+            <button type="button" onClick={() => setStatus("Sign up not implemented.")}>SIGN UP</button>
+            <button type="button" onClick={handleLogin}>LOGIN</button>
+          </div>
 
-        <p className="status">{status}</p>
-        <p className="meta">
-          {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"} |{" "}
-          {pendingField ? `pending: ${pendingField}` : `active: ${activeField ?? "none"}`}
-          {isListening ? " | SPEECH..." : ""}
-          {isClicking ? " | CLICK!" : ""}
-        </p>
-      </section>
+          <p className="status">{status}</p>
+          <p className="meta">
+            {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"} |{" "}
+            {pendingField ? `pending: ${pendingField}` : `active: ${activeField ?? "none"}`}
+            {isListening ? " | SPEECH..." : ""}
+            {isClicking ? " | CLICK!" : ""}
+          </p>
+        </section>
+      )}
 
       <div className={`camera-pane${showCamera ? "" : " camera-pane--hidden"}`} aria-label="Gesture camera">
         <video ref={videoRef} autoPlay playsInline muted />
