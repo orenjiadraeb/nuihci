@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -7,7 +7,6 @@ import "./App.css";
 const HandsCtor = globalThis.Hands;
 const CameraCtor = globalThis.Camera;
 const FaceMeshCtor = globalThis.FaceMesh;
-const HAND_CONNECTIONS = globalThis.HAND_CONNECTIONS;
 
 const MEDIAPIPE_HANDS_BASE =
   "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/";
@@ -91,7 +90,6 @@ function isPointingPose(lm) {
 }
 
 function isThumbsUp(lm) {
-  const w = lm[0];
   const thumbTip = lm[4];
   const thumbIp = lm[3];
   const thumbMcp = lm[2];
@@ -195,8 +193,10 @@ export default function App() {
   const ttsEnabledRef = useRef(ttsEnabled);
   const lastSpokenRef = useRef({ text: "", at: 0 });
   const hoverSpeakRef = useRef({ text: "", at: 0, element: null });
+  const speakHoveredElementRef = useRef(null);
+  const handleLoginRef = useRef(() => {});
 
-  const speak = (text) => {
+  const speak = useCallback((text) => {
     if (!ttsEnabledRef.current || !window.speechSynthesis) return;
     const cleanText = String(text || "").trim();
     if (!cleanText) return;
@@ -212,7 +212,7 @@ export default function App() {
     } catch {
       // Ignore browser TTS errors silently.
     }
-  };
+  }, []);
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -234,10 +234,15 @@ export default function App() {
     passwordRef.current = password;
   }, [password]);
 
-  activeFieldRef.current = activeField;
-  pendingFieldRef.current = pendingField;
+  useEffect(() => {
+    activeFieldRef.current = activeField;
+  }, [activeField]);
 
-  const handleLogin = () => {
+  useEffect(() => {
+    pendingFieldRef.current = pendingField;
+  }, [pendingField]);
+
+  const handleLogin = useCallback(() => {
     const currentUsername = normalizeUsername(username || usernameRef.current || "");
     const currentPassword = normalizePassword(password || passwordRef.current || "");
     if (currentUsername === ADMIN_USER && currentPassword === ADMIN_PASS) {
@@ -250,7 +255,11 @@ export default function App() {
     } else {
       setStatus("User not found. Would you like to sign up?");
     }
-  };
+  }, [password, speak, username]);
+
+  useEffect(() => {
+    handleLoginRef.current = handleLogin;
+  }, [handleLogin]);
 
   const handleLogout = () => {
     setIsLoggedIn(false);
@@ -282,7 +291,7 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const getTextToRead = (element) => {
+  const getTextToRead = useCallback((element) => {
     if (!element) return "";
     const explicit = element.getAttribute("data-tts");
     if (explicit) return explicit;
@@ -298,7 +307,7 @@ export default function App() {
       return labelText || "Status selection";
     }
     return element.textContent?.trim() || "";
-  };
+  }, []);
 
   const handleSpeakFromEvent = (event) => {
     if (!ttsEnabledRef.current) return;
@@ -309,7 +318,7 @@ export default function App() {
     if (text) speak(text);
   };
 
-  const speakHoveredElement = (element) => {
+  const speakHoveredElement = useCallback((element) => {
     if (!ttsEnabledRef.current || !element) return;
     const readableTarget = element.closest(
       "[data-tts], button, input, textarea, select, label, h1, h2, h3, p, span, li, strong, em",
@@ -323,7 +332,11 @@ export default function App() {
     if ((isSameElement || isSameText) && now - hoverSpeakRef.current.at < 1000) return;
     hoverSpeakRef.current = { element: readableTarget, text, at: now };
     speak(text);
-  };
+  }, [getTextToRead, speak]);
+
+  useEffect(() => {
+    speakHoveredElementRef.current = speakHoveredElement;
+  }, [speakHoveredElement]);
 
   const addFriend = () => {
     const clean = newFriendName.trim();
@@ -425,10 +438,7 @@ export default function App() {
     let nodAt = 0;
     let nodCooldownUntil = 0;
 
-    const latestPrimary = { hand: null, handedness: null };
-    let secondaryHand = null;
     let clickCooldownUntil = 0;
-    let latestFaceLm = null;
 
     const drawOverlay = () => {
       if (disposed) return;
@@ -557,9 +567,6 @@ export default function App() {
         }
       }
 
-      latestPrimary.hand = pointingHand;
-      secondaryHand = clickHand;
-
       if (pointingHand) {
         const tipX = 1 - pointingHand[INDEX_TIP].x;
         const tipY = pointingHand[INDEX_TIP].y;
@@ -567,21 +574,21 @@ export default function App() {
         const hoverX = tipX * window.innerWidth;
         const hoverY = tipY * window.innerHeight;
         const hoveredElement = document.elementFromPoint(hoverX, hoverY);
-        speakHoveredElement(hoveredElement);
+        speakHoveredElementRef.current?.(hoveredElement);
 
         const speechGesture = !isLoggedInRef.current && activeFieldRef.current && isIndexPointingUp(pointingHand);
         if (speechGesture) {
           if (!mouthGestureRef.current.active) {
             mouthGestureRef.current = { active: true, since: now };
             if (recognitionRef.current && !isListeningRef.current) {
-              try { recognitionRef.current.start(); } catch {}
+              try { recognitionRef.current.start(); } catch { /* ignore repeated start calls */ }
             }
           }
         } else {
           if (mouthGestureRef.current.active) {
             mouthGestureRef.current = { active: false, since: 0 };
             if (recognitionRef.current && isListeningRef.current) {
-              try { recognitionRef.current.stop(); } catch {}
+              try { recognitionRef.current.stop(); } catch { /* ignore stop race conditions */ }
             }
           }
         }
@@ -596,11 +603,9 @@ export default function App() {
           const element = document.elementFromPoint(screenX, screenY);
 
           if (element) {
-            let targetElement = element;
             let buttonElement = element.closest("button");
 
             if (buttonElement) {
-              targetElement = buttonElement;
               buttonElement.click();
               setStatus(`Clicked: ${buttonElement.textContent.trim()}`);
             } else {
@@ -651,14 +656,14 @@ export default function App() {
         clickCooldownUntil = now + 600;
         setIsClicking(true);
         setTimeout(() => setIsClicking(false), 300);
-        handleLogin();
+        handleLoginRef.current();
       }
 
       if (!pointingHand) {
         if (mouthGestureRef.current.active) {
           mouthGestureRef.current = { active: false, since: 0 };
           if (recognitionRef.current && isListeningRef.current) {
-            try { recognitionRef.current.stop(); } catch {}
+            try { recognitionRef.current.stop(); } catch { /* ignore stop race conditions */ }
           }
         }
         if (handsCount > 0) {
@@ -691,7 +696,6 @@ export default function App() {
       if (disposed) return;
       const lm = results.multiFaceLandmarks?.[0];
       if (lm) {
-        latestFaceLm = lm;
         detectNod(lm);
       }
     });
@@ -726,7 +730,7 @@ export default function App() {
   useEffect(() => {
     const handleMouseMove = (event) => {
       const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
-      speakHoveredElement(hoveredElement);
+      speakHoveredElementRef.current?.(hoveredElement);
     };
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => {
