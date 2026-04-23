@@ -1,20 +1,4 @@
 import { initializeApp } from "firebase/app";
-<<<<<<< HEAD
-import { getFirestore } from "firebase/firestore";
-
-export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
-};
-
-const hasConfig = Boolean(firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_API_KEY"));
-const app = hasConfig ? initializeApp(firebaseConfig) : null;
-export const db = hasConfig ? getFirestore(app) : null;
-=======
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -35,4 +19,3 @@ const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 export { auth, db, storage, googleProvider };
->>>>>>> 5748c30533497ccee7519cab5b237b0b2cf98606
