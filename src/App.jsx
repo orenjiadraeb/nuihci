@@ -136,6 +136,7 @@ export default function App() {
   const pendingFieldRef = useRef(null);
   const usernameRef = useRef("");
   const passwordRef = useRef("");
+  const isLoggedInRef = useRef(false);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -228,6 +229,10 @@ export default function App() {
   useEffect(() => {
     passwordRef.current = password;
   }, [password]);
+
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   activeFieldRef.current = activeField;
   pendingFieldRef.current = pendingField;
@@ -639,7 +644,7 @@ export default function App() {
         }
       }
 
-      if (thumbsUpCount === 2 && now >= clickCooldownUntil) {
+      if (!isLoggedInRef.current && thumbsUpCount === 2 && now >= clickCooldownUntil) {
         clickCooldownUntil = now + 600;
         setIsClicking(true);
         setTimeout(() => setIsClicking(false), 300);
@@ -653,7 +658,7 @@ export default function App() {
             try { recognitionRef.current.stop(); } catch {}
           }
         }
-        if (handsCount > 0) {
+        if (!isLoggedInRef.current && handsCount > 0) {
           const lm = results.multiHandLandmarks[0];
           const open = isOpenPalm(lm);
           const side = palmFacing(lm);
