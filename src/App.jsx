@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile } from "./firebaseService";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -244,20 +245,44 @@ export default function App() {
   activeFieldRef.current = activeField;
   pendingFieldRef.current = pendingField;
 
-  const handleLogin = () => {
-    const currentUsername = normalizeUsername(username || usernameRef.current || "");
-    const currentPassword = normalizePassword(password || passwordRef.current || "");
-    if (currentUsername === ADMIN_USER && currentPassword === ADMIN_PASS) {
-      setStatus("Login successful! Welcome, admin.");
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const handleLogin = async () => {
+    const email = String(username || usernameRef.current || "").trim();
+    const passwordValue = String(password || passwordRef.current || "").trim();
+    if (!email || !passwordValue) {
+      setStatus("Enter your email and password to log in.");
+      return;
+    }
+
+    try {
+      const userCredential = await signInEmail(email, passwordValue);
+      const profileData = await getUserProfile(userCredential.user.uid);
+      setCurrentUser(userCredential.user);
+      setProfile((prev) => ({ ...prev, ...(profileData || {}) }));
       setIsLoggedIn(true);
+      setStatus(`Login successful! Welcome back, ${profileData?.displayName || "User"}.`);
       setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
       speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
-    } else {
-      setStatus("User not found. Would you like to sign up?");
+    } catch (error) {
+      if (email.toUpperCase() === ADMIN_USER && normalizePassword(passwordValue) === ADMIN_PASS) {
+        setStatus("Login successful! Welcome, admin.");
+        setIsLoggedIn(true);
+        setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
+        speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
+      } else {
+        setStatus(`Login failed: ${error?.message || "Unable to authenticate."}`);
+      }
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOutUser();
+    } catch {
+      // ignore logout failures
+    }
+    setCurrentUser(null);
     setIsLoggedIn(false);
     setUsername("");
     setPassword("");
