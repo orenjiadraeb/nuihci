@@ -203,6 +203,7 @@ export default function App() {
   const hoverSpeakRef = useRef({ text: "", at: 0, element: null });
   const profileVideoRef = useRef(null);
   const profileCanvasRef = useRef(null);
+  const smoothedCursorRef = useRef({ x: 50, y: 50 });
 
   const speak = (text) => {
     if (!ttsEnabledRef.current || !window.speechSynthesis) return;
@@ -585,11 +586,18 @@ export default function App() {
               const nativeSetter = descriptor?.set;
               if (nativeSetter) {
                 const currentValue = activeElement.value;
-                const start = activeElement.selectionStart || currentValue.length;
-                const end = activeElement.selectionEnd || currentValue.length;
-                const newValue = currentValue.slice(0, start) + cleanText + currentValue.slice(end);
+                const start = activeElement.selectionStart || activeElement.value.length;
+                const end = activeElement.selectionEnd || activeElement.value.length;
+                let insertText = cleanText;
+                const placeholder = activeElement.getAttribute("placeholder") || "";
+                if (placeholder.includes("USERNAME")) {
+                  insertText = cleanText.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                } else if (placeholder.includes("PASSWORD")) {
+                  insertText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
+                }
+                const newValue = currentValue.slice(0, start) + insertText + currentValue.slice(end);
                 nativeSetter.call(activeElement, newValue);
-                activeElement.selectionStart = activeElement.selectionEnd = start + cleanText.length;
+                activeElement.selectionStart = activeElement.selectionEnd = start + insertText.length;
                 activeElement.dispatchEvent(new Event("input", { bubbles: true }));
               }
               setStatus(`Speech recognized: "${cleanText}"`);
@@ -694,7 +702,12 @@ export default function App() {
       if (pointingHand) {
         const tipX = 1 - pointingHand[INDEX_TIP].x;
         const tipY = pointingHand[INDEX_TIP].y;
-        setCursorPos({ x: tipX * 100, y: tipY * 100 });
+        const targetX = tipX * 100;
+        const targetY = tipY * 100;
+        const alpha = 0.35;
+        smoothedCursorRef.current.x = smoothedCursorRef.current.x * (1 - alpha) + targetX * alpha;
+        smoothedCursorRef.current.y = smoothedCursorRef.current.y * (1 - alpha) + targetY * alpha;
+        setCursorPos({ x: smoothedCursorRef.current.x, y: smoothedCursorRef.current.y });
         const hoverX = tipX * window.innerWidth;
         const hoverY = tipY * window.innerHeight;
         const hoveredElement = document.elementFromPoint(hoverX, hoverY);
@@ -804,11 +817,35 @@ export default function App() {
         }
       }
 
-      if (!isLoggedInRef.current && thumbsUpCount === 2 && now >= clickCooldownUntil) {
+      if (thumbsUpCount === 2 && now >= clickCooldownUntil) {
         clickCooldownUntil = now + 600;
         setIsClicking(true);
         setTimeout(() => setIsClicking(false), 300);
-        handleLogin();
+
+        if (!isLoggedInRef.current) {
+          handleLogin();
+        } else {
+          const activeElement = document.activeElement;
+          const placeholder = activeElement?.getAttribute("placeholder") || "";
+          const ariaLabel = activeElement?.getAttribute("aria-label") || "";
+
+          if (placeholder.includes("message") || ariaLabel.includes("message")) {
+            if (chatMessage.trim()) {
+              sendMessage();
+              setStatus("Message sent with double thumbs up");
+            }
+          } else if (placeholder.includes("group") || ariaLabel.includes("group")) {
+            if (newGroupName.trim()) {
+              createGroupChat();
+              setStatus("Group chat created with double thumbs up");
+            }
+          } else if (placeholder.includes("friend") || ariaLabel.includes("friend")) {
+            if (newFriendName.trim()) {
+              addFriend();
+              setStatus("Friend added with double thumbs up");
+            }
+          }
+        }
       }
 
       if (!pointingHand) {
