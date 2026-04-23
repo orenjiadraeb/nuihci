@@ -1,0 +1,35 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  accessibilitySettings: String! # Assuming accessibility settings are stored as a JSON string or similar
+  email: String
+  phoneNumber: String
+  photoUrl: String
+}
+
+type Contact @table(key: ["user1", "user2"]) {
+  user1: User!
+  user2: User!
+  createdAt: Timestamp!
+}
+
+type Conversation @table {
+  createdAt: Timestamp!
+  lastMessageAt: Timestamp!
+  name: String
+}
+
+type ConversationParticipant @table(key: ["conversation", "user"]) {
+  conversation: Conversation!
+  user: User!
+}
+
+type Message @table {
+  text: String!
+  createdAt: Timestamp!
+  sender: User!
+  conversation: Conversation!
+  imageUrl: String
+  audioUrl: String
+  isRead: Boolean
+}
