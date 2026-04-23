@@ -3,6 +3,9 @@ import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
 import "./App.css";
+import ChatInterface from "./components/ChatInterface.jsx";
+import { db } from "./firebaseConfig.js";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const HandsCtor = globalThis.Hands;
 const CameraCtor = globalThis.Camera;
@@ -157,6 +160,8 @@ export default function App() {
     biography: "Welcome to NyoUI messaging dashboard.",
     status: "Online",
   });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [showCameraCapture, setShowCameraCapture] = useState(false);
   const [notifications, setNotifications] = useState([
     "Welcome back! Your dashboard is ready.",
     "Tip: You can use controls for gesture input and speech.",
@@ -195,6 +200,8 @@ export default function App() {
   const ttsEnabledRef = useRef(ttsEnabled);
   const lastSpokenRef = useRef({ text: "", at: 0 });
   const hoverSpeakRef = useRef({ text: "", at: 0, element: null });
+  const profileVideoRef = useRef(null);
+  const profileCanvasRef = useRef(null);
 
   const speak = (text) => {
     if (!ttsEnabledRef.current || !window.speechSynthesis) return;
@@ -280,6 +287,53 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
+  const startCameraCapture = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus("Camera not supported on this device.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (profileVideoRef.current) {
+        profileVideoRef.current.srcObject = stream;
+        setShowCameraCapture(true);
+      }
+    } catch (error) {
+      setStatus("Unable to access camera.");
+    }
+  };
+
+  const captureProfilePicture = () => {
+    const video = profileVideoRef.current;
+    const canvas = profileCanvasRef.current;
+    if (!video || !canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    const imageData = canvas.toDataURL("image/png");
+    setProfile((prev) => ({ ...prev, picture: imageData }));
+    setStatus("Profile picture captured.");
+    speak("Profile picture captured.");
+
+    // Stop the stream
+    const stream = video.srcObject;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    setShowCameraCapture(false);
+  };
+
+  const cancelCameraCapture = () => {
+    const video = profileVideoRef.current;
+    if (video && video.srcObject) {
+      video.srcObject.getTracks().forEach((track) => track.stop());
+    }
+    setShowCameraCapture(false);
+  };
+
   const getTextToRead = (element) => {
     if (!element) return "";
     const explicit = element.getAttribute("data-tts");
@@ -330,21 +384,30 @@ export default function App() {
       setStatus(`${clean} is already in your friends list.`);
       return;
     }
+    const newConversation = {
+      id: `private-${clean}`,
+      type: "private",
+      title: `Private: ${clean}`,
+      participants: ["You", clean],
+      messages: [],
+    };
+
     setFriends((prev) => [...prev, clean]);
-    setConversations((prev) => [
-      ...prev,
-      {
-        id: `private-${clean}`,
-        type: "private",
-        title: `Private: ${clean}`,
-        participants: ["You", clean],
-        messages: [],
-      },
-    ]);
+    setConversations((prev) => [...prev, newConversation]);
     setNotifications((prev) => [`${clean} added to your friends list.`, ...prev]);
     setNewFriendName("");
     setStatus(`${clean} added as friend.`);
     speak(`${clean} added as friend.`);
+
+    if (db) {
+      const convoRef = doc(db, "conversations", newConversation.id);
+      setDoc(convoRef, {
+        ...newConversation,
+        updatedAt: serverTimestamp(),
+      }).catch(() => {
+        /* quietly ignore firestore write failure */
+      });
+    }
   };
 
   const removeFriend = (friendName) => {
@@ -365,43 +428,71 @@ export default function App() {
       setStatus("Group chat name already exists.");
       return;
     }
-    setConversations((prev) => [
-      ...prev,
-      {
-        id,
-        type: "group",
-        title: `Group: ${clean}`,
-        participants: ["You", ...friends.slice(0, 3)],
-        messages: [],
-      },
-    ]);
+
+    const newConversation = {
+      id,
+      type: "group",
+      title: `Group: ${clean}`,
+      participants: ["You", ...friends.slice(0, 3)],
+      messages: [],
+    };
+
+    setConversations((prev) => [...prev, newConversation]);
     setActiveConversationId(id);
     setNewGroupName("");
     setNotifications((prev) => [`Group chat "${clean}" created.`, ...prev]);
     setStatus(`Created group chat: ${clean}`);
     speak(`Group chat ${clean} created.`);
+
+    if (db) {
+      const convoRef = doc(db, "conversations", newConversation.id);
+      setDoc(convoRef, {
+        ...newConversation,
+        updatedAt: serverTimestamp(),
+      }).catch(() => {
+        /* quietly ignore firestore write failure */
+      });
+    }
   };
 
-  const sendMessage = () => {
-    const text = chatMessage.trim();
-    if (!text) return;
-    const timestamp = new Date().toLocaleTimeString();
+  const sendMessage = (payload) => {
+    const messageId = payload?.id || `${activeConversationId}-${Date.now()}`;
+    const timestamp = payload?.time || new Date().toLocaleTimeString();
+    const text = String(payload?.text ?? chatMessage).trim();
+
+    if (!text && payload?.type !== "image" && payload?.type !== "file") return;
+
+    const message = {
+      id: messageId,
+      sender: "You",
+      type: payload?.type || "text",
+      text: payload?.text ?? text,
+      time: timestamp,
+      status: payload?.status || "sent",
+      replyTo: payload?.replyTo,
+      url: payload?.url,
+      alt: payload?.alt,
+      filename: payload?.filename,
+      localTime: payload?.localTime || Date.now(),
+    };
+
     setConversations((prev) =>
       prev.map((conversation) =>
         conversation.id === activeConversationId
           ? {
               ...conversation,
-              messages: [
-                ...conversation.messages,
-                { id: `${conversation.id}-${Date.now()}`, sender: "You", text, time: timestamp },
-              ],
+              messages: [...conversation.messages, message],
             }
           : conversation,
       ),
     );
-    setChatMessage("");
+
+    if (!payload || payload.type === "text") {
+      setChatMessage("");
+    }
+
     setStatus("Message sent.");
-    speak(`Message sent: ${text}`);
+    speak(`Message sent: ${message.text || message.filename || "an attachment"}`);
   };
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0];
@@ -743,7 +834,8 @@ export default function App() {
       <div className="ambient ambient--three" />
 
       {isLoggedIn ? (
-        <section className="dashboard" aria-label="Messaging dashboard">
+        <>
+          <section className="dashboard" aria-label="Messaging dashboard">
           <div className="dashboard-top">
             <div>
               <h2>{getTimeGreeting()} {profile.name || username}!</h2>
@@ -774,61 +866,59 @@ export default function App() {
             <aside className="left-pane" aria-label="Profile and social panels">
               <section className="card" aria-label="Profile settings">
                 <h3>Profile</h3>
-                <img className="profile-picture" src={profile.picture} alt={`${profile.name} profile`} />
-                <input
-                  type="url"
-                  value={profile.picture}
-                  onChange={(e) => updateProfileField("picture", e.target.value)}
-                  placeholder="Profile picture URL"
-                  aria-label="Profile picture URL"
-                />
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => updateProfileField("name", e.target.value)}
-                  placeholder="Name"
-                  aria-label="Profile name"
-                />
-                <input
-                  type="text"
-                  value={profile.biography}
-                  onChange={(e) => updateProfileField("biography", e.target.value)}
-                  placeholder="Biography"
-                  aria-label="Profile biography"
-                />
-                <div className="profile-media-actions">
-                  <button
-                    type="button"
-                    onClick={() => uploadInputRef.current?.click()}
-                    data-tts="Upload profile picture"
-                  >
-                    Upload Picture
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    data-tts="Take profile picture"
-                  >
-                    Take Picture
-                  </button>
+                <img className="profile-picture" src={profile.picture || "https://via.placeholder.com/84x84.png?text=U"} alt={`${profile.name} profile`} />
+
+                {editingProfile ? (
                   <input
-                    ref={uploadInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
-                    className="profile-file-input"
-                    aria-label="Upload profile picture file"
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) => updateProfileField("name", e.target.value)}
+                    placeholder="Name"
+                    aria-label="Profile name"
                   />
+                ) : (
+                  <p className="profile-display">Name: {profile.name}</p>
+                )}
+
+                {editingProfile ? (
                   <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="user"
-                    onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
-                    className="profile-file-input"
-                    aria-label="Take profile picture using camera"
+                    type="text"
+                    value={profile.biography}
+                    onChange={(e) => updateProfileField("biography", e.target.value)}
+                    placeholder="Biography"
+                    aria-label="Profile biography"
                   />
-                </div>
+                ) : (
+                  <p className="profile-display">Bio: {profile.biography}</p>
+                )}
+
+                {editingProfile ? (
+                  <div className="profile-media-actions">
+                    <button
+                      type="button"
+                      onClick={() => uploadInputRef.current?.click()}
+                      data-tts="Upload profile picture"
+                    >
+                      Upload Picture
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startCameraCapture}
+                      data-tts="Take profile picture"
+                    >
+                      Take Picture
+                    </button>
+                    <input
+                      ref={uploadInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
+                      className="profile-file-input"
+                      aria-label="Upload profile picture file"
+                    />
+                  </div>
+                ) : null}
+
                 <select
                   value={profile.status}
                   onChange={(e) => updateProfileField("status", e.target.value)}
@@ -838,6 +928,14 @@ export default function App() {
                   <option>Away</option>
                   <option>Offline</option>
                 </select>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingProfile(!editingProfile)}
+                  className="edit-profile-btn"
+                >
+                  {editingProfile ? "Save Profile" : "Edit Profile"}
+                </button>
               </section>
 
               <section className="card" aria-label="Notifications">
@@ -880,60 +978,21 @@ export default function App() {
               </section>
             </aside>
 
-            <section className="card chat-pane" aria-label="Chatbox">
-              <h3>Chatbox</h3>
-              <div className="inline-input">
-                <input
-                  type="text"
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="Create group chat"
-                  aria-label="Create group chat"
-                />
-                <button type="button" onClick={createGroupChat}>Create Group</button>
-              </div>
-
-              <div className="chat-tabs" role="tablist" aria-label="Conversations">
-                {conversations.map((conversation) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeConversationId === conversation.id}
-                    className={`chat-tab${activeConversationId === conversation.id ? " active" : ""}`}
-                    onClick={() => setActiveConversationId(conversation.id)}
-                  >
-                    {conversation.title}
-                  </button>
-                ))}
-              </div>
-
-              <div className="messages">
-                <p className="muted">
-                  {activeConversation?.type === "private" ? "Private Messages" : "Group Chat"} | Participants:{" "}
-                  {activeConversation?.participants.join(", ")}
-                </p>
-                <ul className="list messages-list" aria-label="Conversation messages">
-                  {(activeConversation?.messages ?? []).map((message) => (
-                    <li key={message.id}>
-                      <strong>{message.sender}</strong>
-                      <span>{message.text}</span>
-                      <em>{message.time}</em>
-                    </li>
-                  ))}
-                </ul>
-                <div className="inline-input">
-                  <input
-                    type="text"
-                    value={chatMessage}
-                    onChange={(e) => setChatMessage(e.target.value)}
-                    placeholder="Type a message"
-                    aria-label="Type a message"
-                  />
-                  <button type="button" onClick={sendMessage}>Send</button>
-                </div>
-              </div>
-            </section>
+            <ChatInterface
+              conversations={conversations}
+              activeConversation={activeConversation}
+              activeConversationId={activeConversationId}
+              onConversationSelect={setActiveConversationId}
+              chatMessage={chatMessage}
+              setChatMessage={setChatMessage}
+              sendMessage={sendMessage}
+              newGroupName={newGroupName}
+              setNewGroupName={setNewGroupName}
+              createGroupChat={createGroupChat}
+              setStatus={setStatus}
+              setConversations={setConversations}
+              currentUserName={username || profile.name || "You"}
+            />
           </div>
 
           <p className="status">{status}</p>
@@ -943,6 +1002,21 @@ export default function App() {
             {isClicking ? " | CLICK!" : ""}
           </p>
         </section>
+
+        {showCameraCapture && (
+          <div className="camera-modal-overlay" onClick={cancelCameraCapture}>
+            <div className="camera-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Take Profile Picture</h3>
+              <video ref={profileVideoRef} autoPlay playsInline className="camera-video" />
+              <canvas ref={profileCanvasRef} style={{ display: "none" }} />
+              <div className="camera-actions">
+                <button type="button" onClick={captureProfilePicture}>Capture</button>
+                <button type="button" onClick={cancelCameraCapture}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
       ) : (
         <section className="login-card">
           <h1 className="brand">

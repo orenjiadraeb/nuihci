@@ -467,7 +467,7 @@
   width: 100%;
   box-sizing: border-box;
   border: 2px solid rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   color: #fff;
   padding: 11px 12px;
@@ -479,13 +479,30 @@
   width: 100%;
   box-sizing: border-box;
   border: 2px solid rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   color: #fff;
   padding: 11px 12px;
   margin-bottom: 8px;
   font-size: 16px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  cursor: pointer;
 }
+
+.card select:focus {
+  border-color: #fff;
+  outline: none;
+}
+
+.card select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
 
 .card input::placeholder {
   color: rgba(255, 255, 255, 0.75);
@@ -499,6 +516,88 @@
   object-fit: cover;
   margin: 0 auto 10px;
   display: block;
+}
+
+.profile-display {
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  color: #fff;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.edit-profile-btn {
+  width: 100%;
+  padding: 11px 12px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.edit-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.camera-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.camera-modal {
+  background: #1a1a1a;
+  border-radius: 16px;
+  padding: 20px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+}
+
+.camera-video {
+  width: 100%;
+  max-width: 400px;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.camera-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+.camera-actions button:hover {
+  background: #0056b3;
+}
+
+.camera-actions button:last-child {
+  background: #6c757d;
+}
+
+.camera-actions button:last-child:hover {
+  background: #545b62;
 }
 
 .profile-media-actions {
@@ -557,6 +656,240 @@
   min-height: 66vh;
   display: grid;
   grid-template-rows: auto auto 1fr;
+}
+
+.chat-interface {
+  grid-template-columns: 280px 1fr;
+  display: grid;
+  gap: 18px;
+  min-height: 70vh;
+}
+
+.chat-interface-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-interface-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conversation-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.conversation-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.conversation-item.active,
+.conversation-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.conversation-select {
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.conversation-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.conversation-title {
+  font-weight: 700;
+}
+
+.conversation-preview {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  color: #d4d4d4;
+}
+
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.status-pill.online {
+  color: #95f3a7;
+}
+
+.status-pill.away {
+  color: #ffd56e;
+}
+
+.status-pill.offline {
+  color: #ff7f7f;
+}
+
+.typing-badge {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #9bbcff;
+}
+
+.messages-panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  gap: 12px;
+}
+
+.messages-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.message-item {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.message-own {
+  align-self: flex-end;
+}
+
+.message-header,
+.message-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #d4d4d4;
+}
+
+.message-bubble {
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  max-width: 80%;
+}
+
+.message-bubble.own {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.message-image {
+  border-radius: 16px;
+  max-width: 100%;
+  display: block;
+}
+
+.message-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.message-file a {
+  color: #9ecbff;
+  text-decoration: underline;
+}
+
+.message-reply-preview {
+  padding: 10px 12px;
+  border-left: 3px solid #7aa5ff;
+  background: rgba(122, 165, 255, 0.12);
+  border-radius: 16px;
+  color: #e8f0ff;
+}
+
+.message-reply-btn {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: #c9d4ff;
+}
+
+.message-status {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.chat-input-row,
+.chat-upload-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chat-input-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.send-button,
+.upload-button,
+.chat-upload-actions button {
+  padding: 10px 14px;
+  border-radius: 999px;
+}
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.file-input {
+  display: none;
+}
+
+.reply-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.error-text {
+  color: #ff9b9b;
+}
+
+.message-empty {
+  opacity: 0.75;
+  padding: 20px;
+  text-align: center;
 }
 
 .chat-tabs {
