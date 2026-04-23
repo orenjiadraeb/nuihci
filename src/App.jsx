@@ -576,17 +576,35 @@ export default function App() {
         if (results.length > 0) {
           const lastResult = results[results.length - 1];
           const text = lastResult[0].transcript;
-          if (lastResult.isFinal && activeFieldRef.current) {
-            const field = activeFieldRef.current;
-            let cleanText = "";
-            if (field === "username") {
-              cleanText = text.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-              setUsername((prev) => (prev + cleanText).slice(0, MAX_FIELD_LENGTH));
-            } else if (field === "password") {
-              cleanText = text.trim().replace(/[^a-zA-Z0-9]/g, "");
-              setPassword((prev) => (prev + cleanText).slice(0, MAX_FIELD_LENGTH));
+          if (lastResult.isFinal) {
+            const cleanText = text.trim();
+            const activeElement = document.activeElement;
+
+            if (activeElement && activeElement.tagName === "INPUT") {
+              const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+              const nativeSetter = descriptor?.set;
+              if (nativeSetter) {
+                const currentValue = activeElement.value;
+                const start = activeElement.selectionStart || currentValue.length;
+                const end = activeElement.selectionEnd || currentValue.length;
+                const newValue = currentValue.slice(0, start) + cleanText + currentValue.slice(end);
+                nativeSetter.call(activeElement, newValue);
+                activeElement.selectionStart = activeElement.selectionEnd = start + cleanText.length;
+                activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+              }
+              setStatus(`Speech recognized: "${cleanText}"`);
+            } else if (activeFieldRef.current) {
+              const field = activeFieldRef.current;
+              let typedText = "";
+              if (field === "username") {
+                typedText = cleanText.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                setUsername((prev) => (prev + typedText).slice(0, MAX_FIELD_LENGTH));
+              } else if (field === "password") {
+                typedText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
+                setPassword((prev) => (prev + typedText).slice(0, MAX_FIELD_LENGTH));
+              }
+              setStatus(`Speech recognized: "${typedText}"`);
             }
-            setStatus(`Speech recognized: "${cleanText}"`);
           }
         }
       };
@@ -682,7 +700,7 @@ export default function App() {
         const hoveredElement = document.elementFromPoint(hoverX, hoverY);
         speakHoveredElement(hoveredElement);
 
-        const speechGesture = activeFieldRef.current && isIndexPointingUp(pointingHand) && document.activeElement?.tagName === "INPUT";
+        const speechGesture = isIndexPointingUp(pointingHand) && document.activeElement?.tagName === "INPUT";
         if (speechGesture) {
           if (!mouthGestureRef.current.active) {
             mouthGestureRef.current = { active: true, since: now };
@@ -748,15 +766,41 @@ export default function App() {
       const twoOpenPalmsFacingCamera = handsCount === 2 &&
         results.multiHandLandmarks.every((lm) => isOpenPalm(lm) && palmFacing(lm) === "palm");
 
-      if (twoOpenPalmsFacingCamera && activeFieldRef.current && now >= clickCooldownUntil) {
+      if (twoOpenPalmsFacingCamera && now >= clickCooldownUntil) {
         clickCooldownUntil = now + 400;
-        const field = activeFieldRef.current;
-        if (field === "username") {
-          setUsername((prev) => prev.slice(0, -1));
-          setStatus("Deleted last character from username");
-        } else if (field === "password") {
-          setPassword((prev) => prev.slice(0, -1));
-          setStatus("Deleted last character from password");
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement.tagName === "INPUT") {
+          const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+          const nativeSetter = descriptor?.set;
+          if (nativeSetter) {
+            const currentValue = activeElement.value;
+            const cursorPos = activeElement.selectionStart || currentValue.length;
+            const textBeforeCursor = currentValue.slice(0, cursorPos);
+            const match = textBeforeCursor.match(/(\S+\s*)$/);
+            const wordLength = match ? match[0].length : 0;
+            const newValue = currentValue.slice(0, cursorPos - wordLength) + currentValue.slice(cursorPos);
+            nativeSetter.call(activeElement, newValue);
+            activeElement.selectionStart = activeElement.selectionEnd = cursorPos - wordLength;
+            activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          setStatus("Deleted last word");
+        } else if (activeFieldRef.current) {
+          const field = activeFieldRef.current;
+          if (field === "username") {
+            setUsername((prev) => {
+              const match = prev.match(/(\S+\s*)$/);
+              const wordLength = match ? match[0].length : 0;
+              return prev.slice(0, -wordLength);
+            });
+            setStatus("Deleted last word from username");
+          } else if (field === "password") {
+            setPassword((prev) => {
+              const match = prev.match(/(\S+\s*)$/);
+              const wordLength = match ? match[0].length : 0;
+              return prev.slice(0, -wordLength);
+            });
+            setStatus("Deleted last word from password");
+          }
         }
       }
 
