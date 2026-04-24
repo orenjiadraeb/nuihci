@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile } from "./firebaseService";
+import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend } from "./firebaseService";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -144,6 +144,13 @@ export default function App() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [signUpEmail, setSignUpEmail] = useState("");
+  const [signUpUsername, setSignUpUsername] = useState("");
+  const [signUpPassword, setSignUpPassword] = useState("");
+  const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
+  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+  const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
   const [activeField, setActiveField] = useState(null);
   const [pendingField, setPendingField] = useState(null);
   const [status, setStatus] = useState("Controls: Point to move, index up = speech, two open palms = delete, one thumb up = click, two thumbs up = login.");
@@ -153,6 +160,7 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [showCamera, setShowCamera] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentScreen, setCurrentScreen] = useState("home");
   const [ttsEnabled, setTtsEnabled] = useState(false);
@@ -180,6 +188,13 @@ export default function App() {
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
   const [showGroupMemberSelect, setShowGroupMemberSelect] = useState(false);
+  
+  // Friend search and request state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [activeConversationId, setActiveConversationId] = useState("private-Ava");
   const [conversations, setConversations] = useState([
@@ -273,30 +288,91 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
   const handleLogin = async () => {
-    const email = String(username || usernameRef.current || "").trim();
+    const loginInput = String(username || usernameRef.current || "").trim();
     const passwordValue = String(password || passwordRef.current || "").trim();
-    if (!email || !passwordValue) {
-      setStatus("Enter your email and password to log in.");
+    if (!loginInput || !passwordValue) {
+      setStatus("Enter your email/username and password to log in.");
       return;
+    }
+
+    let email = loginInput;
+
+    // If input doesn't look like an email, try to look up by username
+    if (!loginInput.includes("@")) {
+      try {
+        const userData = await getUserByUsername(loginInput.toLowerCase());
+        if (userData && userData.email) {
+          email = userData.email;
+        } else {
+          // Username not found, try as email anyway
+          setStatus("Username not found. Trying as email...");
+        }
+      } catch (error) {
+        // Firestore lookup failed, continue with input as email
+        console.log("Username lookup failed, trying as email:", error);
+      }
     }
 
     try {
       const userCredential = await signInEmail(email, passwordValue);
-      const profileData = await getUserProfile(userCredential.user.uid);
       setCurrentUser(userCredential.user);
-      setProfile((prev) => ({ ...prev, ...(profileData || {}) }));
+
+      // Try to get profile data, but handle Firestore permission errors
+      let profileData = null;
+      try {
+        profileData = await getUserProfile(userCredential.user.uid);
+      } catch (firestoreError) {
+        console.log("Firestore profile read failed (permissions):", firestoreError);
+        // Continue with basic profile from Firebase Auth
+        profileData = {
+          displayName: userCredential.user.displayName || userCredential.user.email?.split("@")[0] || "User",
+          email: userCredential.user.email,
+        };
+      }
+
+      // Check if this is the admin account
+      const isAdmin = loginInput.toUpperCase() === ADMIN_USER || email.toUpperCase() === ADMIN_USER;
+
+      if (!isAdmin) {
+        // Reset to empty state for new users
+        setProfile({
+          picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=",
+          name: profileData?.displayName || "New User",
+          biography: "Welcome to NyoUI! Add friends to start chatting.",
+          status: "Online",
+        });
+        setFriends([]);
+        setFriendStatus({});
+        setConversations([]);
+        setNotifications(["Welcome to NyoUI! Your account is ready."]);
+      } else {
+        // Keep defaults for admin
+        setProfile((prev) => ({ ...prev, ...(profileData || {}) }));
+      }
+
       setIsLoggedIn(true);
       setStatus(`Login successful! Welcome back, ${profileData?.displayName || "User"}.`);
-      setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
       speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
     } catch (error) {
+      // Try admin fallback
       if (email.toUpperCase() === ADMIN_USER && normalizePassword(passwordValue) === ADMIN_PASS) {
         setStatus("Login successful! Welcome, admin.");
         setIsLoggedIn(true);
         setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
         speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
       } else {
-        setStatus(`Login failed: ${error?.message || "Unable to authenticate."}`);
+        const errorMsg = error?.message || "Unable to authenticate.";
+        if (errorMsg.includes("user-not-found")) {
+          setStatus("Account not found. Please sign up first.");
+        } else if (errorMsg.includes("wrong-password")) {
+          setStatus("Incorrect password. Please try again.");
+        } else if (errorMsg.includes("invalid-email")) {
+          setStatus("Invalid email format.");
+        } else if (errorMsg.includes("invalid-credential")) {
+          setStatus("Invalid email or password.");
+        } else {
+          setStatus(`Login failed: ${errorMsg}`);
+        }
       }
     }
   };
@@ -315,6 +391,180 @@ export default function App() {
     setPendingField(null);
     setStatus("Logged out.");
   };
+
+  const handleSignUp = async () => {
+    const email = signUpEmail.trim();
+    const displayName = signUpUsername.trim();
+    const password = signUpPassword;
+    const confirmPassword = signUpConfirmPassword;
+
+    if (!email || !displayName || !password || !confirmPassword) {
+      setStatus("Please fill in all fields.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setStatus("Passwords do not match.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setStatus("Password must be at least 6 characters.");
+      return;
+    }
+
+    try {
+      const userCredential = await registerEmail(email, password, displayName);
+      setCurrentUser(userCredential.user);
+      setVerificationSent(true);
+      setStatus("Account created! Please check your email to verify your account.");
+      speak("Account created. Please check your email for verification.");
+    } catch (error) {
+      setStatus(`Sign up failed: ${error?.message || "Unable to create account."}`);
+    }
+  };
+
+  const resetSignUp = () => {
+    setShowSignUp(false);
+    setSignUpEmail("");
+    setSignUpUsername("");
+    setSignUpPassword("");
+    setSignUpConfirmPassword("");
+    setVerificationSent(false);
+  };
+
+  // Friend System Functions
+  const handleSearchUsers = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const results = await searchUsers(searchQuery.toLowerCase());
+      // Filter out current user and existing friends
+      const filteredResults = results.filter(user => 
+        user.uid !== currentUser?.uid && !friends.some(f => f.uid === user.uid)
+      );
+      setSearchResults(filteredResults);
+      setShowSearchResults(true);
+    } catch (error) {
+      setStatus("Search failed: " + (error?.message || "Unknown error"));
+    }
+    setIsSearching(false);
+  };
+
+  const handleSendFriendRequest = async (toUserId, toUsername) => {
+    if (!currentUser?.uid) return;
+    try {
+      await sendFriendRequest(currentUser.uid, profile.name || currentUser.email, toUserId);
+      setStatus(`Friend request sent to ${toUsername}!`);
+      speak(`Friend request sent to ${toUsername}`);
+      // Add outgoing notification
+      setNotifications(prev => [{
+        id: `friend-request-sent-${Date.now()}`,
+        text: `You sent a friend request to ${toUsername}`,
+        type: 'friend-request-outgoing',
+        toUsername: toUsername
+      }, ...prev]);
+      // Remove from search results
+      setSearchResults(prev => prev.filter(u => u.uid !== toUserId));
+    } catch (error) {
+      setStatus(error?.message || "Failed to send friend request");
+    }
+  };
+
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await acceptFriendRequest(requestId);
+      setStatus("Friend request accepted!");
+      // Refresh friends and requests
+      loadFriends();
+      loadFriendRequests();
+    } catch (error) {
+      setStatus("Failed to accept request: " + (error?.message || "Unknown error"));
+    }
+  };
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await rejectFriendRequest(requestId);
+      setStatus("Friend request rejected");
+      loadFriendRequests();
+    } catch (error) {
+      setStatus("Failed to reject request: " + (error?.message || "Unknown error"));
+    }
+  };
+
+  const loadFriends = async () => {
+    if (!currentUser?.uid) return;
+    try {
+      const friendsList = await getFriends(currentUser.uid);
+      setFriends(friendsList.map(f => f.displayName || f.email?.split("@")[0] || "Unknown"));
+      // Update friendStatus with full friend objects for unfriend functionality
+      const newFriendStatus = {};
+      friendsList.forEach(f => {
+        newFriendStatus[f.displayName || f.email?.split("@")[0]] = {
+          online: false,
+          picture: f.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=",
+          uid: f.uid,
+        };
+      });
+      setFriendStatus(newFriendStatus);
+    } catch (error) {
+      console.log("Failed to load friends:", error);
+    }
+  };
+
+  const handleUnfriend = async (friendName) => {
+    if (!currentUser?.uid) return;
+    const friendUid = friendStatus[friendName]?.uid;
+    if (!friendUid) {
+      setStatus("Unable to unfriend: User not found");
+      return;
+    }
+    
+    try {
+      await unfriend(currentUser.uid, friendUid);
+      setStatus(`${friendName} removed from friends`);
+      speak(`${friendName} removed from friends`);
+      // Refresh friends list
+      loadFriends();
+    } catch (error) {
+      setStatus("Failed to unfriend: " + (error?.message || "Unknown error"));
+    }
+  };
+
+  const loadFriendRequests = async () => {
+    if (!currentUser?.uid) return;
+    try {
+      const requests = await getFriendRequests(currentUser.uid);
+      setFriendRequests(requests);
+      // Add friend requests to notifications as objects with actions
+      const requestNotifications = requests.map(r => ({
+        id: `friend-request-${r.id}`,
+        text: `Friend request from ${r.fromUsername}`,
+        type: 'friend-request-incoming',
+        requestId: r.id,
+        fromUsername: r.fromUsername
+      }));
+      
+      setNotifications(prev => {
+        // Remove old friend request notifications
+        const filtered = prev.filter(n => 
+          typeof n === 'string' ? !n.includes("Friend request from") : n.type !== 'friend-request-incoming'
+        );
+        return [...requestNotifications, ...filtered];
+      });
+    } catch (error) {
+      console.log("Failed to load friend requests:", error);
+    }
+  };
+
+  // Load friends and requests when logged in
+  useEffect(() => {
+    if (currentUser && isLoggedIn) {
+      loadFriends();
+      loadFriendRequests();
+    }
+  }, [currentUser, isLoggedIn]);
 
   const updateProfileField = (key, value) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -1094,11 +1344,36 @@ export default function App() {
                       <p className="empty-state">No notifications yet</p>
                     ) : (
                       <ul className="list">
-                        {notifications.map((notice, idx) => (
-                          <li key={`${notice}-${idx}`} className="notification-item">
-                            <span>{notice}</span>
-                          </li>
-                        ))}
+                        {notifications.map((notice, idx) => {
+                          const isFriendRequestIncoming = typeof notice === 'object' && notice.type === 'friend-request-incoming';
+                          const isFriendRequestOutgoing = typeof notice === 'object' && notice.type === 'friend-request-outgoing';
+                          const text = typeof notice === 'string' ? notice : notice.text;
+                          const key = typeof notice === 'object' ? notice.id : `${notice}-${idx}`;
+                          
+                          return (
+                            <li key={key} className={`notification-item ${isFriendRequestIncoming ? 'friend-request' : ''} ${isFriendRequestOutgoing ? 'friend-request-sent' : ''}`}>
+                              <span>{text}</span>
+                              {isFriendRequestIncoming && (
+                                <div className="notification-actions">
+                                  <button
+                                    type="button"
+                                    className="accept-btn"
+                                    onClick={() => handleAcceptRequest(notice.requestId)}
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    onClick={() => handleRejectRequest(notice.requestId)}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -1116,37 +1391,105 @@ export default function App() {
                           <div className="inline-input add-friend-inline">
                             <input
                               type="text"
-                              value={newFriendName}
-                              onChange={(e) => setNewFriendName(e.target.value)}
-                              placeholder="Add friend by name"
-                              aria-label="Add friend by name"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              onKeyPress={(e) => e.key === "Enter" && handleSearchUsers()}
+                              placeholder="Search users..."
+                              aria-label="Search users"
                             />
-                            <button type="button" onClick={addFriend}>Add</button>
+                            <button type="button" onClick={handleSearchUsers} disabled={isSearching}>
+                              {isSearching ? "..." : "Search"}
+                            </button>
                           </div>
                         </div>
-                        <div className="profile-cards">
-                          {friends.map((friend) => (
-                            <button
-                              key={friend}
-                              type="button"
-                              className="profile-card-btn"
-                              onClick={() => {
-                                setSelectedFriend(friend);
-                                setActiveConversationId(`private-${friend}`);
-                                setShowChat(true);
-                              }}
-                              aria-label={`Chat with ${friend}`}
-                            >
-                              <div className="profile-card-image">
-                                <img
-                                  src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                                  alt={friend}
-                                />
-                                <span className={`status-dot ${friendStatus[friend]?.online ? "online" : "offline"}`} />
+
+                        {/* Search Results */}
+                        {showSearchResults && searchResults.length > 0 && (
+                          <div className="search-results">
+                            <h4>Search Results</h4>
+                            {searchResults.map((user) => (
+                              <div key={user.uid} className="search-result-item">
+                                <div className="user-info">
+                                  <img
+                                    src={user.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                    alt={user.displayName}
+                                  />
+                                  <span>{user.displayName || user.email?.split("@")[0]}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendFriendRequest(user.uid, user.displayName || user.email?.split("@")[0])}
+                                >
+                                  Add Friend
+                                </button>
                               </div>
-                              <span className="profile-card-name">{friend}</span>
+                            ))}
+                            <button
+                              type="button"
+                              className="close-search-btn"
+                              onClick={() => { setShowSearchResults(false); setSearchResults([]); }}
+                            >
+                              Close
                             </button>
-                          ))}
+                          </div>
+                        )}
+
+                        {/* Friend Requests */}
+                        {friendRequests.length > 0 && (
+                          <div className="friend-requests">
+                            <h4>Friend Requests ({friendRequests.length})</h4>
+                            {friendRequests.map((request) => (
+                              <div key={request.id} className="friend-request-item">
+                                <span>{request.fromUsername} wants to be friends</span>
+                                <div className="request-actions">
+                                  <button
+                                    type="button"
+                                    className="accept-btn"
+                                    onClick={() => handleAcceptRequest(request.id)}
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="reject-btn"
+                                    onClick={() => handleRejectRequest(request.id)}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="profile-cards">
+                          {friends.length === 0 ? (
+                            <p className="empty-friends">No friends yet. Search for users above to add friends!</p>
+                          ) : (
+                            friends.map((friend) => (
+                              <div key={friend} className="friend-card-wrapper">
+                                <button
+                                  type="button"
+                                  className="profile-card-btn"
+                                  onClick={() => {
+                                    setSelectedFriend(friend);
+                                    setActiveConversationId(`private-${friend}`);
+                                    setShowChat(true);
+                                  }}
+                                  aria-label={`Chat with ${friend}`}
+                                >
+                                  <div className="profile-card-image">
+                                    <img
+                                      src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                      alt={friend}
+                                    />
+                                    <span className={`status-dot ${friendStatus[friend]?.online ? "online" : "offline"}`} />
+                                  </div>
+                                  <span className="profile-card-name">{friend}</span>
+                                </button>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
 
@@ -1230,7 +1573,21 @@ export default function App() {
                             </>
                           )}
                         </div>
-                        {!selectedFriend && (
+                        {selectedFriend ? (
+                          <button
+                            type="button"
+                            className="unfriend-header-btn"
+                            onClick={() => {
+                              if (window.confirm(`Remove ${selectedFriend} from your friends?`)) {
+                                handleUnfriend(selectedFriend);
+                                setShowChat(false);
+                                setSelectedFriend(null);
+                              }
+                            }}
+                          >
+                            Unfriend
+                          </button>
+                        ) : (
                           <button
                             type="button"
                             className="leave-group-btn"
@@ -1369,6 +1726,109 @@ export default function App() {
           </div>
         )}
         </>
+      ) : showSignUp ? (
+        <section className="login-card">
+          <h1 className="brand">
+            Ny<span>o</span>UI
+          </h1>
+
+          {verificationSent ? (
+            <div className="verification-message">
+              <h3>Verify Your Email</h3>
+              <p>We've sent a verification email to <strong>{signUpEmail}</strong>.</p>
+              <p>Please check your inbox and click the verification link to activate your account.</p>
+              <div className="actions">
+                <button type="button" onClick={resetSignUp}>Back to Login</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <form
+                className="fields"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSignUp();
+                }}
+              >
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    value={signUpEmail}
+                    onChange={(e) => setSignUpEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    aria-label="Email"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Username</span>
+                  <input
+                    type="text"
+                    value={signUpUsername}
+                    onChange={(e) => setSignUpUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_FIELD_LENGTH))}
+                    placeholder="Choose a username"
+                    aria-label="Username"
+                  />
+                </label>
+
+                <label className="field password-field">
+                  <span>Password</span>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showSignUpPassword ? "text" : "password"}
+                      value={signUpPassword}
+                      onChange={(e) => setSignUpPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                      placeholder="Create a password"
+                      aria-label="Password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowSignUpPassword(!showSignUpPassword)}
+                      aria-label={showSignUpPassword ? "Hide password" : "Show password"}
+                    >
+                      {showSignUpPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
+                </label>
+
+                <label className="field password-field">
+                  <span>Confirm Password</span>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showSignUpConfirmPassword ? "text" : "password"}
+                      value={signUpConfirmPassword}
+                      onChange={(e) => setSignUpConfirmPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                      placeholder="Re-enter your password"
+                      aria-label="Confirm Password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowSignUpConfirmPassword(!showSignUpConfirmPassword)}
+                      aria-label={showSignUpConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showSignUpConfirmPassword ? "🙈" : "👁️"}
+                    </button>
+                  </div>
+                </label>
+              </form>
+
+              <div className="actions">
+                <button type="button" onClick={resetSignUp}>Back to Login</button>
+                <button type="button" onClick={handleSignUp}>Create Account</button>
+              </div>
+            </>
+          )}
+
+          <p className="status">{status}</p>
+          <p className="meta">
+            {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"}
+            {isListening ? " | SPEECH..." : ""}
+            {isClicking ? " | CLICK!" : ""}
+          </p>
+        </section>
       ) : (
         <section className="login-card">
           <h1 className="brand">
@@ -1383,18 +1843,17 @@ export default function App() {
             }}
           >
             <label className={activeField === "username" ? "field active" : "field"}>
-              <span>Username</span>
+              <span>Email / Username</span>
               <input
                 ref={userRef}
                 type="text"
                 value={username}
                 onChange={(e) => {
-                  const next = e.target.value.slice(0, MAX_FIELD_LENGTH);
-                  setUsername(next);
-                  usernameRef.current = next;
+                  setUsername(e.target.value);
+                  usernameRef.current = e.target.value;
                 }}
-                onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
-                placeholder="SPEECH OR TYPE USERNAME"
+                onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Email or username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
+                placeholder="EMAIL OR USERNAME"
               />
             </label>
 
@@ -1417,7 +1876,7 @@ export default function App() {
 
           <div className="actions">
             <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
-            <button type="button" onClick={() => setStatus("Sign up not implemented.")}>SIGN UP</button>
+            <button type="button" onClick={() => setShowSignUp(true)}>SIGN UP</button>
             <button type="button" onClick={handleLogin}>LOGIN</button>
           </div>
 

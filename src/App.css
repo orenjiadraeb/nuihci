@@ -106,6 +106,151 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
+.password-field .password-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.password-field input {
+  flex: 1;
+}
+
+.password-toggle {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.password-toggle:hover {
+  opacity: 1;
+}
+
+/* Friend System Styles */
+.search-results {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.search-results h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.search-result-item .user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-result-item img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.search-result-item button {
+  padding: 8px 16px;
+  border: 2px solid rgba(129, 140, 248, 0.8);
+  background: rgba(129, 140, 248, 0.3);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.close-search-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.friend-requests {
+  background: rgba(129, 140, 248, 0.15);
+  border: 2px solid rgba(129, 140, 248, 0.4);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.friend-requests h4 {
+  margin: 0 0 12px 0;
+  color: #a5b4fc;
+  font-size: 16px;
+}
+
+.friend-request-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.friend-request-item span {
+  font-weight: 600;
+}
+
+.request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.request-actions .accept-btn {
+  padding: 8px 16px;
+  border: 2px solid rgba(34, 197, 94, 0.8);
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.request-actions .reject-btn {
+  padding: 8px 16px;
+  border: 2px solid rgba(239, 68, 68, 0.8);
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.empty-friends {
+  text-align: center;
+  opacity: 0.7;
+  padding: 32px;
+  font-style: italic;
+}
+
 .actions {
   display: grid;
   gap: 11px;
@@ -141,6 +286,27 @@
   margin: 0;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.82);
+}
+
+.verification-message {
+  text-align: center;
+  padding: 20px;
+  background: rgba(129, 140, 248, 0.15);
+  border: 2px solid rgba(129, 140, 248, 0.4);
+  border-radius: 16px;
+  margin: 16px 0;
+}
+
+.verification-message h3 {
+  margin: 0 0 16px 0;
+  color: #a5b4fc;
+  font-size: 22px;
+}
+
+.verification-message p {
+  margin: 8px 0;
+  opacity: 0.9;
+  line-height: 1.5;
 }
 
 .camera-pane {
@@ -1210,10 +1376,52 @@
 .notification-item {
   padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .notification-item:last-child {
   border-bottom: none;
+}
+
+.notification-item.friend-request {
+  border-left: 3px solid #818cf8;
+  background: rgba(129, 140, 248, 0.1);
+}
+
+.notification-item.friend-request-sent {
+  border-left: 3px solid #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.notification-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.notification-actions .accept-btn {
+  padding: 6px 12px;
+  border: 2px solid rgba(34, 197, 94, 0.8);
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notification-actions .reject-btn {
+  padding: 6px 12px;
+  border: 2px solid rgba(239, 68, 68, 0.8);
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .empty-state {
@@ -1401,6 +1609,33 @@
   font-size: 16px;
   font-weight: 700;
   color: #fff;
+}
+
+.friend-card-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.friend-card-wrapper .profile-card-btn {
+  width: 100%;
+}
+
+.unfriend-header-btn {
+  padding: 8px 16px;
+  border: 2px solid rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.unfriend-header-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  border-color: rgba(239, 68, 68, 0.9);
 }
 
 /* Direct Chat View (Simplified - no conversation list) */

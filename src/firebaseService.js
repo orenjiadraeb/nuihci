@@ -4,15 +4,21 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  sendEmailVerification,
+  updateProfile,
 } from "firebase/auth";
 import {
   doc,
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   collection,
   addDoc,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -22,12 +28,28 @@ export async function signInEmail(email, password) {
 
 export async function registerEmail(email, password, displayName) {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  await createUserProfile(credential.user, {
-    displayName,
-    email,
-    createdAt: serverTimestamp(),
-  });
+  await updateProfile(credential.user, { displayName });
+  
+  // Try to create Firestore profile, but handle permission errors gracefully
+  try {
+    await createUserProfile(credential.user, {
+      displayName,
+      email,
+      createdAt: serverTimestamp(),
+      emailVerified: false,
+    });
+  } catch (firestoreError) {
+    console.log("Firestore profile creation failed (permissions):", firestoreError);
+    // Continue anyway - user can still log in with Firebase Auth
+  }
+  
+  await sendEmailVerification(credential.user);
   return credential;
+}
+
+export async function sendVerificationEmail(user) {
+  if (!user) throw new Error("No user provided");
+  return sendEmailVerification(user);
 }
 
 export async function signInWithGoogle() {
@@ -71,6 +93,15 @@ export async function getUserProfile(uid) {
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
   return snapshot.exists() ? snapshot.data() : null;
+}
+
+export async function getUserByUsername(username) {
+  if (!username) return null;
+  const usersRef = collection(db, "users");
+  const q = query(usersRef, where("displayName", "==", username.toLowerCase()));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  return snapshot.docs[0].data();
 }
 
 export async function updateUserProfile(uid, data) {
@@ -118,4 +149,139 @@ export async function setTypingIndicator(conversationId, userId, isTyping) {
     updatedAt: serverTimestamp(),
   });
   return indicatorRef.id;
+}
+
+// Friend System Functions
+
+export async function searchUsers(searchTerm) {
+  if (!searchTerm) return [];
+  const usersRef = collection(db, "users");
+  const searchLower = searchTerm.toLowerCase();
+  
+  try {
+    // Search by displayName
+    const nameQuery = query(usersRef, where("displayName", ">=", searchLower), where("displayName", "<=", searchLower + "\uf8ff"));
+    const nameSnapshot = await getDocs(nameQuery);
+    const nameResults = nameSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    
+    // Search by email (exact match or starts with)
+    const emailQuery = query(usersRef, where("email", ">=", searchLower), where("email", "<=", searchLower + "\uf8ff"));
+    const emailSnapshot = await getDocs(emailQuery);
+    const emailResults = emailSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    
+    // Merge and deduplicate results
+    const allResults = [...nameResults, ...emailResults];
+    const uniqueResults = allResults.filter((user, index, self) => 
+      index === self.findIndex(u => u.uid === user.uid)
+    );
+    
+    return uniqueResults;
+  } catch (error) {
+    console.log("Search failed (Firestore permissions):", error);
+    // Return empty array but throw a specific error for the UI to handle
+    throw new Error("Database permissions not configured. Please set Firestore rules.");
+  }
+}
+
+export async function sendFriendRequest(fromUserId, fromUsername, toUserId) {
+  if (!fromUserId || !toUserId) throw new Error("User IDs required");
+  
+  // Check if already friends
+  const friendshipRef = doc(db, "friendships", `${fromUserId}_${toUserId}`);
+  const friendshipSnap = await getDoc(friendshipRef);
+  if (friendshipSnap.exists()) throw new Error("Already friends");
+  
+  // Check if request already exists
+  const requestsRef = collection(db, "friendRequests");
+  const existingQuery = query(requestsRef, where("fromUserId", "==", fromUserId), where("toUserId", "==", toUserId), where("status", "==", "pending"));
+  const existingSnap = await getDocs(existingQuery);
+  if (!existingSnap.empty) throw new Error("Friend request already sent");
+  
+  // Create friend request
+  const requestRef = doc(collection(db, "friendRequests"));
+  await setDoc(requestRef, {
+    fromUserId,
+    fromUsername,
+    toUserId,
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+  
+  return requestRef.id;
+}
+
+export async function getFriendRequests(userId) {
+  if (!userId) return [];
+  const requestsRef = collection(db, "friendRequests");
+  const q = query(requestsRef, where("toUserId", "==", userId), where("status", "==", "pending"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function acceptFriendRequest(requestId) {
+  const requestRef = doc(db, "friendRequests", requestId);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new Error("Request not found");
+  
+  const request = requestSnap.data();
+  
+  // Create bidirectional friendship
+  const friendship1Ref = doc(db, "friendships", `${request.fromUserId}_${request.toUserId}`);
+  const friendship2Ref = doc(db, "friendships", `${request.toUserId}_${request.fromUserId}`);
+  
+  await setDoc(friendship1Ref, {
+    userId: request.fromUserId,
+    friendId: request.toUserId,
+    createdAt: serverTimestamp(),
+  });
+  
+  await setDoc(friendship2Ref, {
+    userId: request.toUserId,
+    friendId: request.fromUserId,
+    createdAt: serverTimestamp(),
+  });
+  
+  // Update request status
+  await updateDoc(requestRef, { status: "accepted", updatedAt: serverTimestamp() });
+  
+  return true;
+}
+
+export async function rejectFriendRequest(requestId) {
+  const requestRef = doc(db, "friendRequests", requestId);
+  await updateDoc(requestRef, { status: "rejected", updatedAt: serverTimestamp() });
+  return true;
+}
+
+export async function getFriends(userId) {
+  if (!userId) return [];
+  const friendshipsRef = collection(db, "friendships");
+  const q = query(friendshipsRef, where("userId", "==", userId));
+  const snapshot = await getDocs(q);
+  
+  const friendIds = snapshot.docs.map(doc => doc.data().friendId);
+  
+  // Get friend profiles
+  const friends = [];
+  for (const friendId of friendIds) {
+    const friendProfile = await getUserProfile(friendId);
+    if (friendProfile) {
+      friends.push({ ...friendProfile, uid: friendId });
+    }
+  }
+  
+  return friends;
+}
+
+export async function unfriend(userId, friendId) {
+  if (!userId || !friendId) throw new Error("User IDs required");
+  
+  // Delete bidirectional friendship
+  const friendship1Ref = doc(db, "friendships", `${userId}_${friendId}`);
+  const friendship2Ref = doc(db, "friendships", `${friendId}_${userId}`);
+  
+  await deleteDoc(friendship1Ref);
+  await deleteDoc(friendship2Ref);
+  
+  return true;
 }
