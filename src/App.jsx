@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage } from "./firebaseService";
+import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage, setOnlineStatus } from "./firebaseService";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -395,6 +395,14 @@ export default function App() {
 
       setIsLoggedIn(true);
       setStatus(`Login successful! Welcome back, ${profileData?.displayName || "User"}.`);
+      
+      // Set online status in Firestore
+      try {
+        await setOnlineStatus(userCredential.user.uid, true);
+      } catch (error) {
+        console.log("Failed to set online status:", error);
+      }
+      
       addNotification({ 
         id: `login-${Date.now()}`, 
         text: `${getTimeGreeting()} You logged in successfully.`, 
@@ -407,6 +415,9 @@ export default function App() {
       if (email.toUpperCase() === ADMIN_USER && normalizePassword(passwordValue) === ADMIN_PASS) {
         setStatus("Login successful! Welcome, admin.");
         setIsLoggedIn(true);
+        
+        // Set online status in Firestore (admin doesn't have real uid, skip)
+        
         addNotification({ 
           id: `login-${Date.now()}`, 
           text: `${getTimeGreeting()} You logged in successfully.`, 
@@ -432,6 +443,15 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    // Set offline status in Firestore before logout
+    if (currentUser?.uid) {
+      try {
+        await setOnlineStatus(currentUser.uid, false);
+      } catch (error) {
+        console.log("Failed to set offline status:", error);
+      }
+    }
+    
     try {
       await signOutUser();
     } catch {
@@ -573,8 +593,8 @@ export default function App() {
       const newFriendStatus = {};
       friendsList.forEach(f => {
         newFriendStatus[f.displayName || f.email?.split("@")[0]] = {
-          online: false,
-          picture: f.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=",
+          online: f.online || false, // Use actual online status from Firestore
+          picture: f.photoURL || "https://tse4.mm.bing.net/th/id/OIP.q2Bhu3uI4M21MTzAjZWjLgAAAA?rs=1&pid=ImgDetMain&o=7&rm=3",
           uid: f.uid,
         };
       });

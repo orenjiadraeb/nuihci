@@ -113,6 +113,17 @@ export async function updateUserProfile(uid, data) {
   return getUserProfile(uid);
 }
 
+export async function setOnlineStatus(uid, isOnline) {
+  if (!uid) return null;
+  const userRef = doc(db, "users", uid);
+  await updateDoc(userRef, { 
+    online: isOnline, 
+    lastSeen: serverTimestamp(),
+    updatedAt: serverTimestamp() 
+  });
+  return getUserProfile(uid);
+}
+
 export async function uploadFile(uid, file) {
   if (!uid || !file) {
     throw new Error("Invalid upload request.");
