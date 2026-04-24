@@ -776,10 +776,28 @@ export default function App() {
     return {};
   });
 
+  // Track last viewed message ID for each conversation
+  const [lastViewedMessages, setLastViewedMessages] = useState(() => {
+    const saved = localStorage.getItem('nui-last-viewed-messages');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.log("Failed to parse last viewed messages");
+      }
+    }
+    return {};
+  });
+
   // Save unread messages to localStorage
   useEffect(() => {
     localStorage.setItem('nui-unread-messages', JSON.stringify(unreadMessages));
   }, [unreadMessages]);
+
+  // Save last viewed messages to localStorage
+  useEffect(() => {
+    localStorage.setItem('nui-last-viewed-messages', JSON.stringify(lastViewedMessages));
+  }, [lastViewedMessages]);
 
   // Reset unread count when opening notifications screen
   useEffect(() => {
@@ -801,10 +819,25 @@ export default function App() {
 
   // Helper to reset unread count for a conversation
   const resetUnreadCount = (conversationId) => {
+    // Get the last message ID from the conversation
+    const conversation = conversations.find(c => c.id === conversationId);
+    const lastMessageId = conversation?.messages?.length > 0 
+      ? conversation.messages[conversation.messages.length - 1].id 
+      : null;
+    
+    // Reset unread count
     setUnreadMessages(prev => {
       const { [conversationId]: _, ...rest } = prev;
       return rest;
     });
+    
+    // Track last viewed message
+    if (lastMessageId) {
+      setLastViewedMessages(prev => ({
+        ...prev,
+        [conversationId]: lastMessageId
+      }));
+    }
   };
 
   // Listen to messages for active conversation
@@ -880,17 +913,43 @@ export default function App() {
         );
         
         // Only update unread count if we're not currently viewing this conversation
-        // and if there are new messages
         if (activeConversationId !== convo.id && otherMessages.length > 0) {
           setUnreadMessages(prev => {
-            const currentCount = prev[convo.id] || 0;
-            // Only increment if message count increased
-            if (otherMessages.length > currentCount) {
-              // Play notification sound for new message
-              playNotificationSound();
-              return { ...prev, [convo.id]: otherMessages.length };
+            const lastViewedId = lastViewedMessages[convo.id];
+            
+            // Count only messages that came after the last viewed message
+            let newUnreadCount = 0;
+            if (lastViewedId) {
+              // Find the index of the last viewed message
+              const lastViewedIndex = messages.findIndex(m => m.id === lastViewedId);
+              if (lastViewedIndex !== -1) {
+                // Count messages after the last viewed index
+                newUnreadCount = otherMessages.filter(msg => {
+                  const msgIndex = messages.findIndex(m => m.id === msg.id);
+                  return msgIndex > lastViewedIndex;
+                }).length;
+              } else {
+                // Last viewed message not found (maybe deleted), count all
+                newUnreadCount = otherMessages.length;
+              }
+            } else {
+              // Never viewed this conversation, count all messages
+              newUnreadCount = otherMessages.length;
             }
-            return prev;
+            
+            // Only update if there are unread messages
+            if (newUnreadCount > 0) {
+              // Play notification sound for new message (only if count increased)
+              const currentCount = prev[convo.id] || 0;
+              if (newUnreadCount > currentCount) {
+                playNotificationSound();
+              }
+              return { ...prev, [convo.id]: newUnreadCount };
+            } else {
+              // No unread messages, remove from state
+              const { [convo.id]: _, ...rest } = prev;
+              return rest;
+            }
           });
         }
       });
@@ -901,7 +960,7 @@ export default function App() {
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [conversations, currentUser, profile.name, activeConversationId]);
+  }, [conversations, currentUser, profile.name, activeConversationId, lastViewedMessages]);
 
   // Load conversations from Firestore
   const loadConversations = async () => {
