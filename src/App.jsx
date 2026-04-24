@@ -270,6 +270,7 @@ export default function App() {
   const profileVideoRef = useRef(null);
   const profileCanvasRef = useRef(null);
   const smoothedCursorRef = useRef({ x: 50, y: 50 });
+  const friendsStatusListenersRef = useRef([]);
 
   // Helper to check if text looks like a time string
   const isTimeString = (text) => {
@@ -452,6 +453,10 @@ export default function App() {
       }
     }
     
+    // Clean up friends status listeners
+    friendsStatusListenersRef.current.forEach(unsub => unsub());
+    friendsStatusListenersRef.current = [];
+    
     try {
       await signOutUser();
     } catch {
@@ -599,9 +604,45 @@ export default function App() {
         };
       });
       setFriendStatus(newFriendStatus);
+      
+      // Set up real-time listeners for friends' online status
+      setupFriendsStatusListeners(friendsList);
     } catch (error) {
       console.log("Failed to load friends:", error);
     }
+  };
+
+  // Set up real-time listeners for friends' online status
+  const setupFriendsStatusListeners = (friendsList) => {
+    // Clean up existing listeners
+    friendsStatusListenersRef.current.forEach(unsub => unsub());
+    friendsStatusListenersRef.current = [];
+    
+    if (!friendsList || friendsList.length === 0) return;
+    
+    friendsList.forEach(friend => {
+      const friendUid = friend.uid;
+      if (!friendUid) return;
+      
+      // Listen to friend's profile for online status changes
+      const unsub = onSnapshot(doc(db, "users", friendUid), (snapshot) => {
+        const data = snapshot.data();
+        if (data) {
+          const friendName = friend.displayName || friend.email?.split("@")[0] || "Unknown";
+          setFriendStatus(prev => ({
+            ...prev,
+            [friendName]: {
+              ...prev[friendName],
+              online: data.online || false,
+            }
+          }));
+        }
+      }, (error) => {
+        console.log("Friend status listener error:", error);
+      });
+      
+      friendsStatusListenersRef.current.push(unsub);
+    });
   };
 
   const handleUnfriend = async (friendName) => {
