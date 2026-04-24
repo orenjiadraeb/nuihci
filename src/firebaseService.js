@@ -19,6 +19,8 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
+  orderBy,
 } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -284,4 +286,74 @@ export async function unfriend(userId, friendId) {
   await deleteDoc(friendship2Ref);
   
   return true;
+}
+
+// Conversation Functions
+
+export async function createConversation(conversation) {
+  if (!conversation.id || !conversation.type) throw new Error("Invalid conversation");
+  const convoRef = doc(db, "conversations", conversation.id);
+  await setDoc(convoRef, {
+    ...conversation,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return conversation.id;
+}
+
+export async function getConversations(userId) {
+  if (!userId) return [];
+  const conversationsRef = collection(db, "conversations");
+  const q = query(conversationsRef, where("participants", "array-contains", userId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+export function listenToMessages(conversationId, callback) {
+  if (!conversationId) return () => {};
+  const messagesRef = collection(db, "conversations", conversationId, "messages");
+  const q = query(messagesRef, orderBy("createdAt", "asc"));
+  
+  // First, fetch existing messages immediately
+  getDocs(q).then(snapshot => {
+    console.log("Initial fetch of messages, docs:", snapshot.docs.length);
+    const messages = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    }));
+    console.log("Initial messages loaded:", messages);
+    callback(messages);
+  }).catch(error => {
+    console.error("Initial message fetch error:", error);
+  });
+  
+  // Then set up real-time listener for updates
+  return onSnapshot(q, (snapshot) => {
+    console.log("Firestore snapshot received, docs:", snapshot.docs.length);
+    const messages = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+    }));
+    console.log("Processed messages:", messages);
+    callback(messages);
+  }, (error) => {
+    console.error("Message listener error:", error);
+  });
+}
+
+export function listenToConversations(userId, callback) {
+  if (!userId) return () => {};
+  const conversationsRef = collection(db, "conversations");
+  const q = query(conversationsRef, where("participants", "array-contains", userId));
+  return onSnapshot(q, (snapshot) => {
+    const conversations = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate() || new Date(),
+      updatedAt: doc.data().updatedAt?.toDate() || new Date(),
+    }));
+    callback(conversations);
+  });
 }

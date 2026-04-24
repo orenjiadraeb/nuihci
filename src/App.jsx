@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend } from "./firebaseService";
+import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage } from "./firebaseService";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -172,10 +172,33 @@ export default function App() {
   });
   const [editingProfile, setEditingProfile] = useState(false);
   const [showCameraCapture, setShowCameraCapture] = useState(false);
-  const [notifications, setNotifications] = useState([
-    "Welcome back! Your dashboard is ready.",
-    "Tip: You can use controls for gesture input and speech.",
-  ]);
+  // Load notifications from localStorage or use defaults
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem('nui-notifications');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Convert legacy string notifications to object format
+        return parsed.map((n, idx) => {
+          if (typeof n === 'string') {
+            return { 
+              id: `legacy-${idx}-${Date.now()}`, 
+              text: n, 
+              timestamp: Date.now(), 
+              type: 'info' 
+            };
+          }
+          return n;
+        });
+      } catch (e) {
+        console.log("Failed to parse saved notifications");
+      }
+    }
+    return [
+      { id: 'welcome-1', text: "Welcome back! Your dashboard is ready.", timestamp: Date.now(), type: 'info' },
+      { id: 'welcome-2', text: "Tip: You can use controls for gesture input and speech.", timestamp: Date.now(), type: 'info' },
+    ];
+  });
   const [newFriendName, setNewFriendName] = useState("");
   const [friends, setFriends] = useState(["Ava", "Noah", "Mia"]);
   const [friendStatus, setFriendStatus] = useState({
@@ -196,6 +219,10 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  
+  // Message listener cleanup
+  const messageListenerRef = useRef(null);
+  const conversationListenerRef = useRef(null);
   const [activeConversationId, setActiveConversationId] = useState("private-Ava");
   const [conversations, setConversations] = useState([
     {
@@ -244,10 +271,21 @@ export default function App() {
   const profileCanvasRef = useRef(null);
   const smoothedCursorRef = useRef({ x: 50, y: 50 });
 
+  // Helper to check if text looks like a time string
+  const isTimeString = (text) => {
+    // Matches patterns like "1:11 PM", "13:45", "12:30:45 AM", etc.
+    const timePattern = /^\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM|am|pm)?$/;
+    return timePattern.test(text.trim());
+  };
+
   const speak = (text) => {
     if (!ttsEnabledRef.current || !window.speechSynthesis) return;
+    // Don't speak while mic is listening
+    if (isListeningRef.current) return;
     const cleanText = String(text || "").trim();
     if (!cleanText) return;
+    // Don't read time strings
+    if (isTimeString(cleanText)) return;
     const now = Date.now();
     if (lastSpokenRef.current.text === cleanText && now - lastSpokenRef.current.at < 800) return;
     lastSpokenRef.current = { text: cleanText, at: now };
@@ -344,7 +382,12 @@ export default function App() {
         setFriends([]);
         setFriendStatus({});
         setConversations([]);
-        setNotifications(["Welcome to NyoUI! Your account is ready."]);
+        addNotification({ 
+          id: `signup-${Date.now()}`, 
+          text: "Welcome to NyoUI! Your account is ready.", 
+          timestamp: Date.now(), 
+          type: 'signup' 
+        });
       } else {
         // Keep defaults for admin
         setProfile((prev) => ({ ...prev, ...(profileData || {}) }));
@@ -352,13 +395,24 @@ export default function App() {
 
       setIsLoggedIn(true);
       setStatus(`Login successful! Welcome back, ${profileData?.displayName || "User"}.`);
+      addNotification({ 
+        id: `login-${Date.now()}`, 
+        text: `${getTimeGreeting()} You logged in successfully.`, 
+        timestamp: Date.now(), 
+        type: 'login' 
+      });
       speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
     } catch (error) {
       // Try admin fallback
       if (email.toUpperCase() === ADMIN_USER && normalizePassword(passwordValue) === ADMIN_PASS) {
         setStatus("Login successful! Welcome, admin.");
         setIsLoggedIn(true);
-        setNotifications((prev) => [`${getTimeGreeting()} You logged in successfully.`, ...prev]);
+        addNotification({ 
+          id: `login-${Date.now()}`, 
+          text: `${getTimeGreeting()} You logged in successfully.`, 
+          timestamp: Date.now(), 
+          type: 'login' 
+        });
         speak(`${getTimeGreeting()} Welcome to your messaging dashboard.`);
       } else {
         const errorMsg = error?.message || "Unable to authenticate.";
@@ -445,6 +499,8 @@ export default function App() {
       );
       setSearchResults(filteredResults);
       setShowSearchResults(true);
+      // Clear search input after searching
+      setSearchQuery("");
     } catch (error) {
       setStatus("Search failed: " + (error?.message || "Unknown error"));
     }
@@ -458,12 +514,13 @@ export default function App() {
       setStatus(`Friend request sent to ${toUsername}!`);
       speak(`Friend request sent to ${toUsername}`);
       // Add outgoing notification
-      setNotifications(prev => [{
+      addNotification({
         id: `friend-request-sent-${Date.now()}`,
         text: `You sent a friend request to ${toUsername}`,
         type: 'friend-request-outgoing',
-        toUsername: toUsername
-      }, ...prev]);
+        toUsername: toUsername,
+        timestamp: Date.now()
+      });
       // Remove from search results
       setSearchResults(prev => prev.filter(u => u.uid !== toUserId));
     } catch (error) {
@@ -471,10 +528,17 @@ export default function App() {
     }
   };
 
-  const handleAcceptRequest = async (requestId) => {
+  const handleAcceptRequest = async (requestId, fromUsername) => {
     try {
       await acceptFriendRequest(requestId);
       setStatus("Friend request accepted!");
+      // Add notification
+      addNotification({
+        id: `friend-accepted-${Date.now()}`,
+        text: `You are now friends with ${fromUsername || 'a user'}`,
+        type: 'friend-accepted',
+        timestamp: Date.now()
+      });
       // Refresh friends and requests
       loadFriends();
       loadFriendRequests();
@@ -483,10 +547,17 @@ export default function App() {
     }
   };
 
-  const handleRejectRequest = async (requestId) => {
+  const handleRejectRequest = async (requestId, fromUsername) => {
     try {
       await rejectFriendRequest(requestId);
       setStatus("Friend request rejected");
+      // Add notification
+      addNotification({
+        id: `friend-rejected-${Date.now()}`,
+        text: `You rejected friend request from ${fromUsername || 'a user'}`,
+        type: 'friend-rejected',
+        timestamp: Date.now()
+      });
       loadFriendRequests();
     } catch (error) {
       setStatus("Failed to reject request: " + (error?.message || "Unknown error"));
@@ -543,7 +614,8 @@ export default function App() {
         text: `Friend request from ${r.fromUsername}`,
         type: 'friend-request-incoming',
         requestId: r.id,
-        fromUsername: r.fromUsername
+        fromUsername: r.fromUsername,
+        timestamp: Date.now()
       }));
       
       setNotifications(prev => {
@@ -551,6 +623,15 @@ export default function App() {
         const filtered = prev.filter(n => 
           typeof n === 'string' ? !n.includes("Friend request from") : n.type !== 'friend-request-incoming'
         );
+        // Only add new request notifications that don't already exist
+        const existingIds = new Set(prev.map(n => n.id));
+        const newNotifications = requestNotifications.filter(r => !existingIds.has(r.id));
+        // Increment unread count and play sound for new notifications
+        if (newNotifications.length > 0 && currentScreen !== "notifications") {
+          setUnreadCount(count => count + newNotifications.length);
+          // Play sound for new friend requests
+          playNotificationSound();
+        }
         return [...requestNotifications, ...filtered];
       });
     } catch (error) {
@@ -563,8 +644,231 @@ export default function App() {
     if (currentUser && isLoggedIn) {
       loadFriends();
       loadFriendRequests();
+      loadConversations();
     }
   }, [currentUser, isLoggedIn]);
+
+  // Save notifications to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('nui-notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  // Track unread notifications
+  const [unreadCount, setUnreadCount] = useState(() => {
+    const saved = localStorage.getItem('nui-unread-count');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  // Sound notification preference
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('nui-sound-enabled');
+    return saved !== null ? saved === 'true' : true; // Default to enabled
+  });
+
+  // Save sound preference
+  useEffect(() => {
+    localStorage.setItem('nui-sound-enabled', soundEnabled.toString());
+  }, [soundEnabled]);
+
+  // Notification sound using Web Audio API (generates a pleasant chime)
+  const playNotificationSound = () => {
+    if (!soundEnabled) return;
+    
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Create a pleasant notification sound (two tones)
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+      oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1); // E5
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (error) {
+      console.log("Failed to play notification sound:", error);
+    }
+  };
+
+  // Save unread count to localStorage
+  useEffect(() => {
+    localStorage.setItem('nui-unread-count', unreadCount.toString());
+  }, [unreadCount]);
+
+  // Track unread messages per conversation
+  const [unreadMessages, setUnreadMessages] = useState(() => {
+    const saved = localStorage.getItem('nui-unread-messages');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.log("Failed to parse unread messages");
+      }
+    }
+    return {};
+  });
+
+  // Save unread messages to localStorage
+  useEffect(() => {
+    localStorage.setItem('nui-unread-messages', JSON.stringify(unreadMessages));
+  }, [unreadMessages]);
+
+  // Reset unread count when opening notifications screen
+  useEffect(() => {
+    if (currentScreen === "notifications") {
+      setUnreadCount(0);
+    }
+  }, [currentScreen]);
+
+  // Helper function to add notification and increment unread count
+  const addNotification = (notification) => {
+    setNotifications(prev => [notification, ...prev]);
+    // Only increment if not currently viewing notifications
+    if (currentScreen !== "notifications") {
+      setUnreadCount(prev => prev + 1);
+      // Play notification sound
+      playNotificationSound();
+    }
+  };
+
+  // Helper to reset unread count for a conversation
+  const resetUnreadCount = (conversationId) => {
+    setUnreadMessages(prev => {
+      const { [conversationId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  // Listen to messages for active conversation
+  useEffect(() => {
+    console.log("Message listener useEffect triggered. activeConversationId:", activeConversationId, "currentUser:", !!currentUser);
+    if (activeConversationId && currentUser) {
+      // Clean up previous listener
+      if (messageListenerRef.current) {
+        messageListenerRef.current();
+      }
+      
+      // Set up new listener
+      console.log("Setting up message listener for:", activeConversationId);
+      console.log("Current conversations:", conversations.map(c => c.id));
+      messageListenerRef.current = listenToMessages(activeConversationId, (messages) => {
+        console.log("Received messages from Firestore:", messages);
+        console.log("Message count:", messages.length);
+        setConversations(prev => {
+          console.log("Current conversations before update:", prev.map(c => ({ id: c.id, msgCount: c.messages.length })));
+          return prev.map(convo => {
+            console.log("Checking conversation:", convo.id, "against", activeConversationId, "match:", convo.id === activeConversationId);
+            if (convo.id === activeConversationId) {
+              // Convert Firestore messages to local format
+              const localMessages = messages.map(msg => ({
+                id: msg.id,
+                sender: msg.senderName === (profile.name || currentUser.email?.split("@")[0]) ? "You" : msg.senderName,
+                text: msg.text,
+                time: msg.createdAt?.toLocaleTimeString() || new Date().toLocaleTimeString(),
+                type: (msg.type === "text" || !msg.type) ? "text" : msg.type, // Normalize type
+                url: msg.attachments?.[0]?.url,
+              }));
+              console.log("Updated conversation messages:", localMessages);
+              console.log("Conversation will have", localMessages.length, "messages");
+              return { ...convo, messages: localMessages };
+            }
+            return convo;
+          });
+        });
+      }, (error) => {
+        console.error("Message listener error:", error);
+        // If conversation doesn't exist, create it
+        if (error.code === 'permission-denied' || error.message.includes('not found')) {
+          console.log("Conversation doesn't exist, will be created on first message");
+        }
+      });
+    } else {
+      console.log("Message listener useEffect skipped. activeConversationId:", activeConversationId, "currentUser:", !!currentUser);
+    }
+    
+    return () => {
+      if (messageListenerRef.current) {
+        messageListenerRef.current();
+      }
+    };
+  }, [activeConversationId, currentUser, profile.name]);
+
+  // Track unread messages for all conversations
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const unsubscribers = [];
+    
+    // Set up listeners for all conversations
+    conversations.forEach(convo => {
+      const unsub = listenToMessages(convo.id, (messages) => {
+        // Count messages not from current user and not yet seen
+        const myName = profile.name || currentUser.email?.split("@")[0] || "You";
+        const myUid = currentUser.uid;
+        
+        // Get messages from others (not from me)
+        const otherMessages = messages.filter(msg => 
+          msg.senderName !== myName && msg.senderId !== myUid
+        );
+        
+        // Only update unread count if we're not currently viewing this conversation
+        // and if there are new messages
+        if (activeConversationId !== convo.id && otherMessages.length > 0) {
+          setUnreadMessages(prev => {
+            const currentCount = prev[convo.id] || 0;
+            // Only increment if message count increased
+            if (otherMessages.length > currentCount) {
+              // Play notification sound for new message
+              playNotificationSound();
+              return { ...prev, [convo.id]: otherMessages.length };
+            }
+            return prev;
+          });
+        }
+      });
+      
+      unsubscribers.push(unsub);
+    });
+    
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [conversations, currentUser, profile.name, activeConversationId]);
+
+  // Load conversations from Firestore
+  const loadConversations = async () => {
+    if (!currentUser?.uid) return;
+    try {
+      const firestoreConversations = await getConversations(currentUser.uid);
+      console.log("Loaded conversations from Firestore:", firestoreConversations);
+      // Merge with local conversations
+      firestoreConversations.forEach(convo => {
+        setConversations(prev => {
+          const exists = prev.find(c => c.id === convo.id);
+          if (!exists) {
+            return [...prev, {
+              id: convo.id,
+              type: convo.type,
+              title: convo.title,
+              participants: convo.participants,
+              messages: [],
+            }];
+          }
+          return prev;
+        });
+      });
+    } catch (error) {
+      console.log("Failed to load conversations (may be normal for new users):", error);
+      // Don't show error to user - it's normal if they have no conversations yet
+    }
+  };
 
   const updateProfileField = (key, value) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -654,26 +958,66 @@ export default function App() {
 
   const handleSpeakFromEvent = (event) => {
     if (!ttsEnabledRef.current) return;
+    // Don't speak while mic is listening
+    if (isListeningRef.current) return;
+    // Only speak for clickable/interactive elements (same as hover)
     const target = event.target.closest(
-      "[data-tts], button, input, textarea, select, label, h1, h2, h3, p, span, li, strong, em",
+      "[data-tts], button, input, textarea, select, a, [role='button'], [onclick]"
     );
+    if (!target) return;
     const text = getTextToRead(target);
     if (text) speak(text);
   };
 
+  // Check if element is a chat message
+  const isChatMessage = (element) => {
+    return element.closest('.direct-message, .message-bubble') !== null;
+  };
+
+  // Get chat message text (sender + message)
+  const getChatMessageText = (element) => {
+    const msgElement = element.closest('.direct-message, .message-bubble');
+    if (!msgElement) return null;
+    
+    const sender = msgElement.querySelector('.message-sender')?.textContent?.trim();
+    const text = msgElement.querySelector('.message-text')?.textContent?.trim();
+    
+    if (sender && text) {
+      return `${sender}: ${text}`;
+    }
+    return null;
+  };
+
   const speakHoveredElement = (element) => {
     if (!ttsEnabledRef.current || !element) return;
-    const readableTarget = element.closest(
-      "[data-tts], button, input, textarea, select, label, h1, h2, h3, p, span, li, strong, em",
+    // Don't speak while mic is listening
+    if (isListeningRef.current) return;
+    
+    // Check if it's a chat message first
+    if (isChatMessage(element)) {
+      const chatText = getChatMessageText(element);
+      if (chatText) {
+        const now = Date.now();
+        if (hoverSpeakRef.current.text === chatText && now - hoverSpeakRef.current.at < 1000) return;
+        hoverSpeakRef.current = { element, text: chatText, at: now };
+        speak(chatText);
+      }
+      return;
+    }
+    
+    // Only read clickable/interactive elements
+    const clickableTarget = element.closest(
+      "[data-tts], button, input, textarea, select, a, [role='button'], [onclick]"
     );
-    if (!readableTarget) return;
-    const text = getTextToRead(readableTarget);
+    if (!clickableTarget) return;
+    
+    const text = getTextToRead(clickableTarget);
     if (!text) return;
     const now = Date.now();
-    const isSameElement = hoverSpeakRef.current.element === readableTarget;
+    const isSameElement = hoverSpeakRef.current.element === clickableTarget;
     const isSameText = hoverSpeakRef.current.text === text;
     if ((isSameElement || isSameText) && now - hoverSpeakRef.current.at < 1000) return;
-    hoverSpeakRef.current = { element: readableTarget, text, at: now };
+    hoverSpeakRef.current = { element: clickableTarget, text, at: now };
     speak(text);
   };
 
@@ -698,7 +1042,12 @@ export default function App() {
       [clean]: { online: true, picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=" },
     }));
     setConversations((prev) => [...prev, newConversation]);
-    setNotifications((prev) => [`${clean} added to your friends list.`, ...prev]);
+    addNotification({ 
+      id: `friend-added-${Date.now()}`, 
+      text: `${clean} added to your friends list.`, 
+      timestamp: Date.now(), 
+      type: 'friend-added' 
+    });
     setNewFriendName("");
     setStatus(`${clean} added as friend.`);
     speak(`${clean} added as friend.`);
@@ -724,11 +1073,16 @@ export default function App() {
     if (activeConversationId === `private-${friendName}`) {
       setActiveConversationId("group-team");
     }
-    setNotifications((prev) => [`${friendName} removed from friends list.`, ...prev]);
+    addNotification({ 
+      id: `friend-removed-${Date.now()}`, 
+      text: `${friendName} removed from friends list.`, 
+      timestamp: Date.now(), 
+      type: 'friend-removed' 
+    });
     setStatus(`${friendName} removed from friends list.`);
   };
 
-  const createGroupChat = () => {
+  const createGroupChat = async () => {
     const clean = newGroupName.trim();
     if (!clean) {
       setStatus("Enter a group name first.");
@@ -744,11 +1098,18 @@ export default function App() {
       return;
     }
 
+    // Get participant UIDs
+    const participantUids = selectedGroupMembers.map(m => friendStatus[m]?.uid).filter(Boolean);
+    if (currentUser) {
+      participantUids.push(currentUser.uid);
+    }
+
     const newConversation = {
       id,
       type: "group",
       title: `Group: ${clean}`,
       participants: ["You", ...selectedGroupMembers],
+      participantUids, // Store UIDs for Firestore
       messages: [],
     };
 
@@ -758,18 +1119,27 @@ export default function App() {
     setSelectedGroupMembers([]);
     setShowGroupMemberSelect(false);
     setShowChat(true);
-    setNotifications((prev) => [`Group chat "${clean}" created.`, ...prev]);
+    addNotification({ 
+      id: `group-created-${Date.now()}`, 
+      text: `Group chat "${clean}" created.`, 
+      timestamp: Date.now(), 
+      type: 'group-created' 
+    });
     setStatus(`Created group chat: ${clean}`);
     speak(`Group chat ${clean} created.`);
 
-    if (db) {
-      const convoRef = doc(db, "conversations", newConversation.id);
-      setDoc(convoRef, {
-        ...newConversation,
-        updatedAt: serverTimestamp(),
-      }).catch(() => {
-        /* quietly ignore firestore write failure */
-      });
+    // Store in Firestore
+    if (currentUser && participantUids.length > 0) {
+      try {
+        await createConversation({
+          id,
+          type: "group",
+          title: `Group: ${clean}`,
+          participants: participantUids,
+        });
+      } catch (error) {
+        console.log("Failed to create group in Firestore:", error);
+      }
     }
   };
 
@@ -780,12 +1150,17 @@ export default function App() {
       setShowChat(false);
     }
     const groupTitle = conversations.find((c) => c.id === groupId)?.title || "Group";
-    setNotifications((prev) => [`You left ${groupTitle}.`, ...prev]);
+    addNotification({ 
+      id: `group-left-${Date.now()}`, 
+      text: `You left ${groupTitle}.`, 
+      timestamp: Date.now(), 
+      type: 'group-left' 
+    });
     setStatus(`Left ${groupTitle}`);
     speak(`You left the group`);
   };
 
-  const sendMessage = (payload) => {
+  const sendMessage = async (payload) => {
     const messageId = payload?.id || `${activeConversationId}-${Date.now()}`;
     const timestamp = payload?.time || new Date().toLocaleTimeString();
     const text = String(payload?.text ?? chatMessage).trim();
@@ -806,6 +1181,7 @@ export default function App() {
       localTime: payload?.localTime || Date.now(),
     };
 
+    // Update local state immediately (show message to user)
     setConversations((prev) =>
       prev.map((conversation) =>
         conversation.id === activeConversationId
@@ -823,6 +1199,23 @@ export default function App() {
 
     setStatus("Message sent.");
     speak(`Message sent: ${message.text || message.filename || "an attachment"}`);
+
+    // Send to Firestore (async, doesn't block UI)
+    if (currentUser && activeConversationId) {
+      try {
+        await postMessage(activeConversationId, {
+          text: text,
+          senderId: currentUser.uid,
+          senderName: profile.name || currentUser.email?.split("@")[0] || "You",
+          type: payload?.type || "text",
+          attachments: payload?.url ? [{ url: payload.url, type: payload.type }] : [],
+        });
+        console.log("Message sent to Firestore successfully");
+      } catch (error) {
+        console.error("Failed to send message to Firestore:", error);
+        setStatus("Message sent locally (sync may be delayed)");
+      }
+    }
   };
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
@@ -1338,7 +1731,21 @@ export default function App() {
 
               {currentScreen === "notifications" && (
                 <section className="screen notifications-screen" aria-label="Notifications screen">
-                  <h2>Notifications</h2>
+                  <div className="notifications-header">
+                    <h2>Notifications</h2>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        className="clear-notifications-btn"
+                        onClick={() => {
+                          setNotifications([]);
+                          localStorage.removeItem('nui-notifications');
+                        }}
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
                   <div className="notifications-list">
                     {notifications.length === 0 ? (
                       <p className="empty-state">No notifications yet</p>
@@ -1347,25 +1754,33 @@ export default function App() {
                         {notifications.map((notice, idx) => {
                           const isFriendRequestIncoming = typeof notice === 'object' && notice.type === 'friend-request-incoming';
                           const isFriendRequestOutgoing = typeof notice === 'object' && notice.type === 'friend-request-outgoing';
+                          const noticeType = typeof notice === 'object' ? notice.type : '';
                           const text = typeof notice === 'string' ? notice : notice.text;
-                          const key = typeof notice === 'object' ? notice.id : `${notice}-${idx}`;
+                          const key = typeof notice === 'object' && notice.id ? notice.id : `notice-${idx}`;
+                          const timestamp = typeof notice === 'object' && notice.timestamp ? notice.timestamp : null;
+                          const timeString = timestamp ? new Date(timestamp).toLocaleString() : '';
                           
                           return (
-                            <li key={key} className={`notification-item ${isFriendRequestIncoming ? 'friend-request' : ''} ${isFriendRequestOutgoing ? 'friend-request-sent' : ''}`}>
-                              <span>{text}</span>
+                            <li key={key} className={`notification-item ${isFriendRequestIncoming ? 'friend-request' : ''} ${isFriendRequestOutgoing ? 'friend-request-sent' : ''} ${noticeType || ''}`}>
+                              <div className="notification-content">
+                                <span className="notification-text">{text}</span>
+                                {timeString && (
+                                  <span className="notification-time">{timeString}</span>
+                                )}
+                              </div>
                               {isFriendRequestIncoming && (
                                 <div className="notification-actions">
                                   <button
                                     type="button"
                                     className="accept-btn"
-                                    onClick={() => handleAcceptRequest(notice.requestId)}
+                                    onClick={() => handleAcceptRequest(notice.requestId, notice.fromUsername)}
                                   >
                                     Accept
                                   </button>
                                   <button
                                     type="button"
                                     className="reject-btn"
-                                    onClick={() => handleRejectRequest(notice.requestId)}
+                                    onClick={() => handleRejectRequest(notice.requestId, notice.fromUsername)}
                                   >
                                     Reject
                                   </button>
@@ -1445,14 +1860,14 @@ export default function App() {
                                   <button
                                     type="button"
                                     className="accept-btn"
-                                    onClick={() => handleAcceptRequest(request.id)}
+                                    onClick={() => handleAcceptRequest(request.id, request.fromUsername)}
                                   >
                                     Accept
                                   </button>
                                   <button
                                     type="button"
                                     className="reject-btn"
-                                    onClick={() => handleRejectRequest(request.id)}
+                                    onClick={() => handleRejectRequest(request.id, request.fromUsername)}
                                   >
                                     Reject
                                   </button>
@@ -1466,15 +1881,59 @@ export default function App() {
                           {friends.length === 0 ? (
                             <p className="empty-friends">No friends yet. Search for users above to add friends!</p>
                           ) : (
-                            friends.map((friend) => (
+                            friends.map((friend) => {
+                              const friendUid = friendStatus[friend]?.uid;
+                              const conversationId = friendUid ? `private-${[currentUser.uid, friendUid].sort().join('-')}` : `private-${friend}`;
+                              const unreadCount = unreadMessages[conversationId] || 0;
+                              
+                              return (
                               <div key={friend} className="friend-card-wrapper">
                                 <button
                                   type="button"
                                   className="profile-card-btn"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     setSelectedFriend(friend);
-                                    setActiveConversationId(`private-${friend}`);
+                                    console.log("Friend UID:", friendUid);
+                                    console.log("Current user UID:", currentUser?.uid);
+                                    console.log("Conversation ID:", conversationId);
+                                    setActiveConversationId(conversationId);
                                     setShowChat(true);
+                                    
+                                    // Reset unread count for this conversation
+                                    resetUnreadCount(conversationId);
+                                    
+                                    // Add conversation to local state if it doesn't exist
+                                    setConversations(prev => {
+                                      console.log("Current conversations before adding:", prev.map(c => c.id));
+                                      const exists = prev.find(c => c.id === conversationId);
+                                      console.log("Conversation exists:", exists);
+                                      if (!exists) {
+                                        const newConvo = {
+                                          id: conversationId,
+                                          type: "private",
+                                          title: `Private: ${friend}`,
+                                          participants: ["You", friend],
+                                          messages: [],
+                                        };
+                                        console.log("Adding new conversation:", newConvo);
+                                        return [...prev, newConvo];
+                                      }
+                                      return prev;
+                                    });
+                                    
+                                    // Create conversation in Firestore if it doesn't exist
+                                    if (currentUser && friendUid) {
+                                      try {
+                                        await createConversation({
+                                          id: conversationId,
+                                          type: "private",
+                                          title: `Private: ${friend}`,
+                                          participants: [currentUser.uid, friendUid],
+                                        });
+                                      } catch (error) {
+                                        console.log("Conversation may already exist:", error);
+                                      }
+                                    }
                                   }}
                                   aria-label={`Chat with ${friend}`}
                                 >
@@ -1486,9 +1945,13 @@ export default function App() {
                                     <span className={`status-dot ${friendStatus[friend]?.online ? "online" : "offline"}`} />
                                   </div>
                                   <span className="profile-card-name">{friend}</span>
+                                  {unreadCount > 0 && (
+                                    <span className="message-badge">{unreadCount}</span>
+                                  )}
                                 </button>
                               </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       </div>
@@ -1622,10 +2085,15 @@ export default function App() {
                             type="text"
                             value={chatMessage}
                             onChange={(e) => setChatMessage(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === "Enter" && chatMessage.trim()) {
+                                sendMessage();
+                              }
+                            }}
                             placeholder="Type a message"
                             aria-label="Type a message"
                           />
-                          <button type="button" className="send-button" onClick={sendMessage}>Send</button>
+                          <button type="button" className="send-button" onClick={() => chatMessage.trim() && sendMessage()}>Send</button>
                         </div>
                       </div>
                     </div>
@@ -1656,6 +2124,9 @@ export default function App() {
                 onClick={() => setCurrentScreen("notifications")}
               >
                 Notifications
+                {unreadCount > 0 && (
+                  <span className="notification-badge">{unreadCount}</span>
+                )}
               </button>
             </footer>
 
@@ -1909,36 +2380,70 @@ export default function App() {
 
       {showGuide && (
         <div className="guide-overlay" onClick={() => setShowGuide(false)}>
-          <div className="guide-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="guide-modal settings-modal" onClick={(e) => e.stopPropagation()}>
             <button className="guide-close" onClick={() => setShowGuide(false)}>✕</button>
-            <h2>Controls Guide</h2>
-            <div className="guide-content">
-              <div className="guide-item">
-                <strong>Move cursor:</strong> Point index finger anywhere
+            <h2>Settings</h2>
+            
+            {/* Sound Settings */}
+            <div className="settings-section">
+              <h3>Sound & Audio</h3>
+              <div className="settings-item">
+                <div className="settings-info">
+                  <span className="settings-label">Notification Sounds</span>
+                  <span className="settings-description">Play sound for new messages and notifications</span>
+                </div>
+                <button
+                  type="button"
+                  className={`settings-toggle ${soundEnabled ? 'enabled' : 'disabled'}`}
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                >
+                  {soundEnabled ? '🔔 On' : '🔕 Off'}
+                </button>
               </div>
-              <div className="guide-item">
-                <strong>Click:</strong> Thumbs up with other hand while pointing
+              
+              <div className="settings-item">
+                <div className="settings-info">
+                  <span className="settings-label">Text-to-Speech</span>
+                  <span className="settings-description">Speak elements on hover/focus</span>
+                </div>
+                <button
+                  type="button"
+                  className={`settings-toggle ${ttsEnabled ? 'enabled' : 'disabled'}`}
+                  onClick={() => setTtsEnabled(!ttsEnabled)}
+                >
+                  {ttsEnabled ? '🔊 On' : '🔇 Off'}
+                </button>
               </div>
-              <div className="guide-item">
-                <strong>Speech-to-text:</strong> Index finger pointing directly up (vertical) when field is active
-              </div>
-              <div className="guide-item">
-                <strong>Delete last char:</strong> Two hands, both open palms facing camera
-              </div>
-              <div className="guide-item">
-                <strong>Login:</strong> Two thumbs up
-              </div>
-              <div className="guide-item">
-                <strong>Select username field:</strong> Show open palm, then nod
-              </div>
-              <div className="guide-item">
-                <strong>Select password field:</strong> Show back of hand, then nod
-              </div>
-              <div className="guide-item">
-                <strong>Click input directly:</strong> Point at input with cursor and thumbs up
-              </div>
-              <div className="guide-item">
-                <strong>Text-to-Speech:</strong> Use the Controls panel toggle to enable or disable spoken feedback
+            </div>
+            
+            {/* Controls Guide */}
+            <div className="settings-section">
+              <h3>Gesture Controls Guide</h3>
+              <div className="guide-content">
+                <div className="guide-item">
+                  <strong>Move cursor:</strong> Point index finger anywhere
+                </div>
+                <div className="guide-item">
+                  <strong>Click:</strong> Thumbs up with other hand while pointing
+                </div>
+                <div className="guide-item">
+                  <strong>Speech-to-text:</strong> Index finger pointing directly up (vertical) when field is active
+                </div>
+                <div className="guide-item">
+                  <strong>Delete last char:</strong> Two hands, both open palms facing camera
+                </div>
+                <div className="guide-item">
+                  <strong>Login:</strong> Two thumbs up
+                </div>
+                <div className="guide-item">
+                  <strong>Select username field:</strong> Show open palm, then nod
+                </div>
+                <div className="guide-item">
+                  <strong>Select password field:</strong> Show back of hand, then nod
+                </div>
+                <div className="guide-item">
+                  <strong>Click input directly:</strong> Point at input with cursor and thumbs up
+                </div>
               </div>
             </div>
           </div>
