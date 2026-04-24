@@ -157,7 +157,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState("home");
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [profile, setProfile] = useState({
-    picture: "https://via.placeholder.com/84x84.png?text=U",
+    picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=",
     name: "Admin User",
     biography: "Welcome to NyoUI messaging dashboard.",
     status: "Online",
@@ -170,7 +170,16 @@ export default function App() {
   ]);
   const [newFriendName, setNewFriendName] = useState("");
   const [friends, setFriends] = useState(["Ava", "Noah", "Mia"]);
+  const [friendStatus, setFriendStatus] = useState({
+    "Ava": { online: false, picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=" },
+    "Noah": { online: false, picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=" },
+    "Mia": { online: false, picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=" },
+  });
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [showChat, setShowChat] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
+  const [showGroupMemberSelect, setShowGroupMemberSelect] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [activeConversationId, setActiveConversationId] = useState("private-Ava");
   const [conversations, setConversations] = useState([
@@ -182,6 +191,20 @@ export default function App() {
       messages: [
         { id: "m1", sender: "Ava", text: "Hi! Ready to chat?", time: new Date().toLocaleTimeString() },
       ],
+    },
+    {
+      id: "private-Noah",
+      type: "private",
+      title: "Private: Noah",
+      participants: ["You", "Noah"],
+      messages: [],
+    },
+    {
+      id: "private-Mia",
+      type: "private",
+      title: "Private: Mia",
+      participants: ["You", "Mia"],
+      messages: [],
     },
     {
       id: "group-team",
@@ -420,6 +443,10 @@ export default function App() {
     };
 
     setFriends((prev) => [...prev, clean]);
+    setFriendStatus((prev) => ({
+      ...prev,
+      [clean]: { online: true, picture: "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM=" },
+    }));
     setConversations((prev) => [...prev, newConversation]);
     setNotifications((prev) => [`${clean} added to your friends list.`, ...prev]);
     setNewFriendName("");
@@ -439,6 +466,10 @@ export default function App() {
 
   const removeFriend = (friendName) => {
     setFriends((prev) => prev.filter((friend) => friend !== friendName));
+    setFriendStatus((prev) => {
+      const { [friendName]: _, ...rest } = prev;
+      return rest;
+    });
     setConversations((prev) => prev.filter((convo) => convo.id !== `private-${friendName}`));
     if (activeConversationId === `private-${friendName}`) {
       setActiveConversationId("group-team");
@@ -449,7 +480,14 @@ export default function App() {
 
   const createGroupChat = () => {
     const clean = newGroupName.trim();
-    if (!clean) return;
+    if (!clean) {
+      setStatus("Enter a group name first.");
+      return;
+    }
+    if (selectedGroupMembers.length === 0) {
+      setStatus("Select at least one friend to add.");
+      return;
+    }
     const id = `group-${clean.toLowerCase().replace(/\s+/g, "-")}`;
     if (conversations.some((conversation) => conversation.id === id)) {
       setStatus("Group chat name already exists.");
@@ -460,13 +498,16 @@ export default function App() {
       id,
       type: "group",
       title: `Group: ${clean}`,
-      participants: ["You", ...friends.slice(0, 3)],
+      participants: ["You", ...selectedGroupMembers],
       messages: [],
     };
 
     setConversations((prev) => [...prev, newConversation]);
     setActiveConversationId(id);
     setNewGroupName("");
+    setSelectedGroupMembers([]);
+    setShowGroupMemberSelect(false);
+    setShowChat(true);
     setNotifications((prev) => [`Group chat "${clean}" created.`, ...prev]);
     setStatus(`Created group chat: ${clean}`);
     speak(`Group chat ${clean} created.`);
@@ -480,6 +521,18 @@ export default function App() {
         /* quietly ignore firestore write failure */
       });
     }
+  };
+
+  const leaveGroupChat = (groupId) => {
+    setConversations((prev) => prev.filter((c) => c.id !== groupId));
+    if (activeConversationId === groupId) {
+      setActiveConversationId("");
+      setShowChat(false);
+    }
+    const groupTitle = conversations.find((c) => c.id === groupId)?.title || "Group";
+    setNotifications((prev) => [`You left ${groupTitle}.`, ...prev]);
+    setStatus(`Left ${groupTitle}`);
+    speak(`You left the group`);
   };
 
   const sendMessage = (payload) => {
@@ -522,7 +575,7 @@ export default function App() {
     speak(`Message sent: ${message.text || message.filename || "an attachment"}`);
   };
 
-  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0];
+  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -962,7 +1015,7 @@ export default function App() {
                 <section className="screen profile-screen" aria-label="Profile screen">
                   <h2>User Profile</h2>
                   <div className="profile-card">
-                    <img className="profile-picture-large" src={profile.picture || "https://via.placeholder.com/150x150.png?text=U"} alt={`${profile.name} profile`} />
+                    <img className="profile-picture-large" src={profile.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="} alt={`${profile.name} profile`} />
 
                     {editingProfile ? (
                       <>
@@ -1054,53 +1107,172 @@ export default function App() {
 
               {currentScreen === "home" && (
                 <section className="screen home-screen" aria-label="Home screen">
-                  <div className="home-grid">
-                    <aside className="friends-sidebar" aria-label="Friends list">
-                      <section className="card" aria-label="Friends list">
-                        <h3>Friends List</h3>
-                        <div className="inline-input">
+                  {!showChat ? (
+                    <div className="home-content">
+                      {/* Friends Section */}
+                      <div className="section-container">
+                        <div className="section-header">
+                          <h2>Your Friends</h2>
+                          <div className="inline-input add-friend-inline">
+                            <input
+                              type="text"
+                              value={newFriendName}
+                              onChange={(e) => setNewFriendName(e.target.value)}
+                              placeholder="Add friend by name"
+                              aria-label="Add friend by name"
+                            />
+                            <button type="button" onClick={addFriend}>Add</button>
+                          </div>
+                        </div>
+                        <div className="profile-cards">
+                          {friends.map((friend) => (
+                            <button
+                              key={friend}
+                              type="button"
+                              className="profile-card-btn"
+                              onClick={() => {
+                                setSelectedFriend(friend);
+                                setActiveConversationId(`private-${friend}`);
+                                setShowChat(true);
+                              }}
+                              aria-label={`Chat with ${friend}`}
+                            >
+                              <div className="profile-card-image">
+                                <img
+                                  src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                  alt={friend}
+                                />
+                                <span className={`status-dot ${friendStatus[friend]?.online ? "online" : "offline"}`} />
+                              </div>
+                              <span className="profile-card-name">{friend}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Groups Section */}
+                      <div className="section-container groups-section">
+                        <div className="section-header">
+                          <h2>Groups</h2>
+                          <div className="inline-input add-friend-inline">
+                            <input
+                              type="text"
+                              value={newGroupName}
+                              onChange={(e) => setNewGroupName(e.target.value)}
+                              placeholder="Create group chat"
+                              aria-label="Create group chat"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (newGroupName.trim()) {
+                                  setShowGroupMemberSelect(true);
+                                } else {
+                                  setStatus("Enter a group name first.");
+                                }
+                              }}
+                            >
+                              Create
+                            </button>
+                          </div>
+                        </div>
+                        <div className="groups-list">
+                          {conversations.filter(c => c.type === "group").map((group) => (
+                            <button
+                              key={group.id}
+                              type="button"
+                              className="group-card-btn"
+                              onClick={() => {
+                                setSelectedFriend(null);
+                                setActiveConversationId(group.id);
+                                setShowChat(true);
+                              }}
+                              aria-label={`Open ${group.title}`}
+                            >
+                              <div className="group-icon">
+                                <span>{group.title.charAt(group.title.indexOf(":") + 2).toUpperCase()}</span>
+                              </div>
+                              <span className="group-card-name">{group.title.replace("Group: ", "")}</span>
+                              <span className="group-participants">{group.participants.length} members</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="direct-chat-view">
+                      <div className="direct-chat-header">
+                        <button
+                          type="button"
+                          className="back-btn"
+                          onClick={() => {
+                            setShowChat(false);
+                            setSelectedFriend(null);
+                          }}
+                        >
+                          ← Back
+                        </button>
+                        <div className="chat-header-info">
+                          {selectedFriend ? (
+                            <>
+                              <img
+                                className="chat-header-avatar"
+                                src={friendStatus[selectedFriend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                alt={selectedFriend}
+                              />
+                              <span className="chat-header-name">{selectedFriend}</span>
+                              <span className={`status-dot small ${friendStatus[selectedFriend]?.online ? "online" : "offline"}`} />
+                            </>
+                          ) : (
+                            <>
+                              <div className="group-avatar">{activeConversation?.title?.charAt(activeConversation?.title?.indexOf(":") + 2) || "G"}</div>
+                              <span className="chat-header-name">{activeConversation?.title?.replace("Group: ", "") || "Group"}</span>
+                            </>
+                          )}
+                        </div>
+                        {!selectedFriend && (
+                          <button
+                            type="button"
+                            className="leave-group-btn"
+                            onClick={() => leaveGroupChat(activeConversationId)}
+                          >
+                            Leave Group
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="direct-chat-messages">
+                        {(activeConversation?.messages ?? []).length === 0 ? (
+                          <div className="empty-chat">No messages yet. Start the conversation!</div>
+                        ) : (
+                          <ul className="direct-messages-list">
+                            {(activeConversation?.messages ?? []).map((message) => (
+                              <li key={message.id} className={`direct-message ${message.sender === "You" ? "own" : ""}`}>
+                                <div className="message-bubble">
+                                  <span className="message-sender">{message.sender}</span>
+                                  <span className="message-text">{message.text}</span>
+                                  <span className="message-time">{message.time}</span>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <div className="direct-chat-input">
+                        <div className="chat-input-row">
                           <input
                             type="text"
-                            value={newFriendName}
-                            onChange={(e) => setNewFriendName(e.target.value)}
-                            placeholder="Add friend by name"
-                            aria-label="Add friend by name"
+                            value={chatMessage}
+                            onChange={(e) => setChatMessage(e.target.value)}
+                            placeholder="Type a message"
+                            aria-label="Type a message"
                           />
-                          <button type="button" onClick={addFriend}>Add</button>
+                          <button type="button" className="send-button" onClick={sendMessage}>Send</button>
                         </div>
-                        <ul className="list">
-                          {friends.map((friend) => (
-                            <li key={friend}>
-                              <button
-                                type="button"
-                                className={`list-open small-btn${activeConversationId === `private-${friend}` ? " active" : ""}`}
-                                onClick={() => setActiveConversationId(`private-${friend}`)}
-                              >
-                                {friend}
-                              </button>
-                              <button type="button" className="small-btn danger" onClick={() => removeFriend(friend)}>Remove</button>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    </aside>
-
-                    <ChatInterface
-                      conversations={conversations}
-                      activeConversation={activeConversation}
-                      activeConversationId={activeConversationId}
-                      onConversationSelect={setActiveConversationId}
-                      chatMessage={chatMessage}
-                      setChatMessage={setChatMessage}
-                      sendMessage={sendMessage}
-                      newGroupName={newGroupName}
-                      setNewGroupName={setNewGroupName}
-                      createGroupChat={createGroupChat}
-                      setStatus={setStatus}
-                      setConversations={setConversations}
-                      currentUserName={username || profile.name || "You"}
-                    />
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
             </main>
@@ -1147,6 +1319,51 @@ export default function App() {
               <div className="camera-actions">
                 <button type="button" onClick={captureProfilePicture}>Capture</button>
                 <button type="button" onClick={cancelCameraCapture}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showGroupMemberSelect && (
+          <div className="camera-modal-overlay" onClick={() => setShowGroupMemberSelect(false)}>
+            <div className="camera-modal member-select-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Select Members for "{newGroupName}"</h3>
+              <div className="member-select-list">
+                {friends.length === 0 ? (
+                  <p className="empty-members">No friends to add. Add friends first!</p>
+                ) : (
+                  friends.map((friend) => (
+                    <label key={friend} className="member-select-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedGroupMembers.includes(friend)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGroupMembers((prev) => [...prev, friend]);
+                          } else {
+                            setSelectedGroupMembers((prev) => prev.filter((f) => f !== friend));
+                          }
+                        }}
+                      />
+                      <img
+                        src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                        alt={friend}
+                      />
+                      <span>{friend}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <div className="member-select-actions">
+                <button
+                  type="button"
+                  className="create-group-btn"
+                  onClick={createGroupChat}
+                  disabled={selectedGroupMembers.length === 0}
+                >
+                  Create Group ({selectedGroupMembers.length} selected)
+                </button>
+                <button type="button" onClick={() => setShowGroupMemberSelect(false)}>Cancel</button>
               </div>
             </div>
           </div>
