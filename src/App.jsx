@@ -154,6 +154,7 @@ export default function App() {
   const [showCamera, setShowCamera] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentScreen, setCurrentScreen] = useState("home");
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [profile, setProfile] = useState({
     picture: "https://via.placeholder.com/84x84.png?text=U",
@@ -941,173 +942,201 @@ export default function App() {
 
       {isLoggedIn ? (
         <>
-          <section className="dashboard" aria-label="Messaging dashboard">
-          <div className="dashboard-top">
-            <div>
-              <h2>{getTimeGreeting()} {profile.name || username}!</h2>
-              <p className="small">Messaging dashboard active for {username}.</p>
-            </div>
-            <div className="top-actions">
-              <button type="button" onClick={() => setShowGuide(true)}>CONTROLS</button>
-              <button type="button" className="danger" onClick={handleLogout}>LOGOUT</button>
-            </div>
-          </div>
+          <section className="app-screen" aria-label="App screen">
+            {/* Header */}
+            <header className="app-header">
+              <div className="header-left">
+                <button type="button" className="header-btn" onClick={() => setShowGuide(true)}>Settings</button>
+              </div>
+              <div className="header-center">
+                <h2>NyoUI</h2>
+              </div>
+              <div className="header-right">
+                <button type="button" className="header-btn danger" onClick={handleLogout}>Logout</button>
+              </div>
+            </header>
 
-          <section className="controls-panel" aria-label="Controls preferences">
-            <h3>Controls</h3>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={ttsEnabled}
-                onChange={(e) => {
-                  setTtsEnabled(e.target.checked);
-                  setStatus(e.target.checked ? "Text-to-Speech enabled." : "Text-to-Speech disabled.");
-                }}
-              />
-              <span>Text-to-Speech {ttsEnabled ? "On" : "Off"}</span>
-            </label>
-          </section>
+            {/* Main Content */}
+            <main className="app-main">
+              {currentScreen === "profile" && (
+                <section className="screen profile-screen" aria-label="Profile screen">
+                  <h2>User Profile</h2>
+                  <div className="profile-card">
+                    <img className="profile-picture-large" src={profile.picture || "https://via.placeholder.com/150x150.png?text=U"} alt={`${profile.name} profile`} />
 
-          <div className="dashboard-grid">
-            <aside className="left-pane" aria-label="Profile and social panels">
-              <section className="card" aria-label="Profile settings">
-                <h3>Profile</h3>
-                <img className="profile-picture" src={profile.picture || "https://via.placeholder.com/84x84.png?text=U"} alt={`${profile.name} profile`} />
+                    {editingProfile ? (
+                      <>
+                        <input
+                          type="text"
+                          value={profile.name}
+                          onChange={(e) => updateProfileField("name", e.target.value)}
+                          placeholder="Name"
+                          aria-label="Profile name"
+                        />
+                        <input
+                          type="text"
+                          value={profile.biography}
+                          onChange={(e) => updateProfileField("biography", e.target.value)}
+                          placeholder="Biography"
+                          aria-label="Profile biography"
+                        />
+                        <div className="profile-media-actions">
+                          <button
+                            type="button"
+                            onClick={() => uploadInputRef.current?.click()}
+                            data-tts="Upload profile picture"
+                          >
+                            Upload Picture
+                          </button>
+                          <button
+                            type="button"
+                            onClick={startCameraCapture}
+                            data-tts="Take profile picture"
+                          >
+                            Take Picture
+                          </button>
+                          <input
+                            ref={uploadInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
+                            className="profile-file-input"
+                            aria-label="Upload profile picture file"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="profile-name">{profile.name}</p>
+                        <p className="profile-bio">{profile.biography}</p>
+                      </>
+                    )}
 
-                {editingProfile ? (
-                  <input
-                    type="text"
-                    value={profile.name}
-                    onChange={(e) => updateProfileField("name", e.target.value)}
-                    placeholder="Name"
-                    aria-label="Profile name"
-                  />
-                ) : (
-                  <p className="profile-display">Name: {profile.name}</p>
-                )}
+                    <select
+                      value={profile.status}
+                      onChange={(e) => updateProfileField("status", e.target.value)}
+                      aria-label="User availability status"
+                    >
+                      <option>Online</option>
+                      <option>Away</option>
+                      <option>Offline</option>
+                    </select>
 
-                {editingProfile ? (
-                  <input
-                    type="text"
-                    value={profile.biography}
-                    onChange={(e) => updateProfileField("biography", e.target.value)}
-                    placeholder="Biography"
-                    aria-label="Profile biography"
-                  />
-                ) : (
-                  <p className="profile-display">Bio: {profile.biography}</p>
-                )}
-
-                {editingProfile ? (
-                  <div className="profile-media-actions">
                     <button
                       type="button"
-                      onClick={() => uploadInputRef.current?.click()}
-                      data-tts="Upload profile picture"
+                      onClick={() => setEditingProfile(!editingProfile)}
+                      className="edit-profile-btn"
                     >
-                      Upload Picture
+                      {editingProfile ? "Save Profile" : "Edit Profile"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={startCameraCapture}
-                      data-tts="Take profile picture"
-                    >
-                      Take Picture
-                    </button>
-                    <input
-                      ref={uploadInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => updateProfilePictureFromFile(e.target.files?.[0])}
-                      className="profile-file-input"
-                      aria-label="Upload profile picture file"
+                  </div>
+                </section>
+              )}
+
+              {currentScreen === "notifications" && (
+                <section className="screen notifications-screen" aria-label="Notifications screen">
+                  <h2>Notifications</h2>
+                  <div className="notifications-list">
+                    {notifications.length === 0 ? (
+                      <p className="empty-state">No notifications yet</p>
+                    ) : (
+                      <ul className="list">
+                        {notifications.map((notice, idx) => (
+                          <li key={`${notice}-${idx}`} className="notification-item">
+                            <span>{notice}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {currentScreen === "home" && (
+                <section className="screen home-screen" aria-label="Home screen">
+                  <div className="home-grid">
+                    <aside className="friends-sidebar" aria-label="Friends list">
+                      <section className="card" aria-label="Friends list">
+                        <h3>Friends List</h3>
+                        <div className="inline-input">
+                          <input
+                            type="text"
+                            value={newFriendName}
+                            onChange={(e) => setNewFriendName(e.target.value)}
+                            placeholder="Add friend by name"
+                            aria-label="Add friend by name"
+                          />
+                          <button type="button" onClick={addFriend}>Add</button>
+                        </div>
+                        <ul className="list">
+                          {friends.map((friend) => (
+                            <li key={friend}>
+                              <button
+                                type="button"
+                                className={`list-open small-btn${activeConversationId === `private-${friend}` ? " active" : ""}`}
+                                onClick={() => setActiveConversationId(`private-${friend}`)}
+                              >
+                                {friend}
+                              </button>
+                              <button type="button" className="small-btn danger" onClick={() => removeFriend(friend)}>Remove</button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    </aside>
+
+                    <ChatInterface
+                      conversations={conversations}
+                      activeConversation={activeConversation}
+                      activeConversationId={activeConversationId}
+                      onConversationSelect={setActiveConversationId}
+                      chatMessage={chatMessage}
+                      setChatMessage={setChatMessage}
+                      sendMessage={sendMessage}
+                      newGroupName={newGroupName}
+                      setNewGroupName={setNewGroupName}
+                      createGroupChat={createGroupChat}
+                      setStatus={setStatus}
+                      setConversations={setConversations}
+                      currentUserName={username || profile.name || "You"}
                     />
                   </div>
-                ) : null}
+                </section>
+              )}
+            </main>
 
-                <select
-                  value={profile.status}
-                  onChange={(e) => updateProfileField("status", e.target.value)}
-                  aria-label="User availability status"
-                >
-                  <option>Online</option>
-                  <option>Away</option>
-                  <option>Offline</option>
-                </select>
+            {/* Footer Navigation */}
+            <footer className="app-footer">
+              <button
+                type="button"
+                className={`nav-btn${currentScreen === "profile" ? " active" : ""}`}
+                onClick={() => setCurrentScreen("profile")}
+              >
+                User Profile
+              </button>
+              <button
+                type="button"
+                className={`nav-btn${currentScreen === "home" ? " active" : ""}`}
+                onClick={() => setCurrentScreen("home")}
+              >
+                Home
+              </button>
+              <button
+                type="button"
+                className={`nav-btn${currentScreen === "notifications" ? " active" : ""}`}
+                onClick={() => setCurrentScreen("notifications")}
+              >
+                Notifications
+              </button>
+            </footer>
 
-                <button
-                  type="button"
-                  onClick={() => setEditingProfile(!editingProfile)}
-                  className="edit-profile-btn"
-                >
-                  {editingProfile ? "Save Profile" : "Edit Profile"}
-                </button>
-              </section>
-
-              <section className="card" aria-label="Notifications">
-                <h3>Notifications</h3>
-                <ul className="list">
-                  {notifications.slice(0, 5).map((notice, idx) => (
-                    <li key={`${notice}-${idx}`}>
-                      <span>{notice}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="card" aria-label="Friends list">
-                <h3>Friends List</h3>
-                <div className="inline-input">
-                  <input
-                    type="text"
-                    value={newFriendName}
-                    onChange={(e) => setNewFriendName(e.target.value)}
-                    placeholder="Add friend by name"
-                    aria-label="Add friend by name"
-                  />
-                  <button type="button" onClick={addFriend}>Add</button>
-                </div>
-                <ul className="list">
-                  {friends.map((friend) => (
-                    <li key={friend}>
-                      <button
-                        type="button"
-                        className={`list-open small-btn${activeConversationId === `private-${friend}` ? " active" : ""}`}
-                        onClick={() => setActiveConversationId(`private-${friend}`)}
-                      >
-                        {friend}
-                      </button>
-                      <button type="button" className="small-btn danger" onClick={() => removeFriend(friend)}>Remove</button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </aside>
-
-            <ChatInterface
-              conversations={conversations}
-              activeConversation={activeConversation}
-              activeConversationId={activeConversationId}
-              onConversationSelect={setActiveConversationId}
-              chatMessage={chatMessage}
-              setChatMessage={setChatMessage}
-              sendMessage={sendMessage}
-              newGroupName={newGroupName}
-              setNewGroupName={setNewGroupName}
-              createGroupChat={createGroupChat}
-              setStatus={setStatus}
-              setConversations={setConversations}
-              currentUserName={username || profile.name || "You"}
-            />
-          </div>
-
-          <p className="status">{status}</p>
-          <p className="meta">
-            {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"}
-            {isListening ? " | SPEECH..." : ""}
-            {isClicking ? " | CLICK!" : ""}
-          </p>
-        </section>
+            <p className="status">{status}</p>
+            <p className="meta">
+              {handsSeen > 0 ? `${handsSeen} hand${handsSeen > 1 ? "s" : ""} tracked` : "Waiting for hands"}
+              {isListening ? " | SPEECH..." : ""}
+              {isClicking ? " | CLICK!" : ""}
+            </p>
+          </section>
 
         {showCameraCapture && (
           <div className="camera-modal-overlay" onClick={cancelCameraCapture}>

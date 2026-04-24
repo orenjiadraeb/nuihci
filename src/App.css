@@ -947,3 +947,234 @@
     min-height: 52vh;
   }
 }
+
+/* App Screen Layout */
+.app-screen {
+  z-index: 2;
+  width: min(98vw, 1400px);
+  height: min(96vh, 900px);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(24, 33, 113, 0.24), rgba(12, 21, 94, 0.18));
+  border: 1px solid rgba(173, 208, 255, 0.18);
+  box-shadow: 0 22px 44px rgba(19, 29, 106, 0.28);
+  overflow: hidden;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(173, 208, 255, 0.15);
+}
+
+.header-left,
+.header-right {
+  flex: 1;
+}
+
+.header-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.header-center {
+  flex: 0 0 auto;
+}
+
+.header-center h2 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #a9c6ff 0%, #d5b8ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-btn {
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Main Content */
+.app-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.screen {
+  height: 100%;
+}
+
+.screen h2 {
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  color: #fff;
+}
+
+/* Profile Screen */
+.profile-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.profile-card {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(173, 208, 255, 0.15);
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-picture-large {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  object-fit: cover;
+  align-self: center;
+  border: 3px solid rgba(173, 208, 255, 0.3);
+}
+
+.profile-name {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0;
+}
+
+.profile-bio {
+  font-size: 16px;
+  opacity: 0.8;
+  text-align: center;
+  margin: 0;
+}
+
+/* Notifications Screen */
+.notifications-screen {
+  padding: 20px;
+}
+
+.notifications-list {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.notification-item {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.empty-state {
+  text-align: center;
+  opacity: 0.6;
+  padding: 40px;
+}
+
+/* Home Screen */
+.home-screen {
+  padding: 0;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  height: 100%;
+}
+
+.friends-sidebar {
+  overflow-y: auto;
+}
+
+/* Footer Navigation */
+.app-footer {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(173, 208, 255, 0.15);
+}
+
+.nav-btn {
+  flex: 1;
+  max-width: 150px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-btn.active {
+  background: rgba(129, 140, 248, 0.4);
+  border-color: rgba(129, 140, 248, 0.8);
+}
+
+/* Responsive */
+@media (max-width: 920px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .friends-sidebar {
+    max-height: 200px;
+  }
+
+  .app-header {
+    padding: 12px 16px;
+  }
+
+  .header-center h2 {
+    font-size: 22px;
+  }
+
+  .header-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .nav-btn {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+}
