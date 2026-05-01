@@ -148,6 +148,7 @@ export default function App() {
   const [signUpUsername, setSignUpUsername] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
   const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
@@ -1403,13 +1404,14 @@ export default function App() {
               const nativeSetter = descriptor?.set;
               if (nativeSetter) {
                 const currentValue = activeElement.value;
-                const start = activeElement.selectionStart || activeElement.value.length;
-                const end = activeElement.selectionEnd || activeElement.value.length;
+                const start = activeElement.selectionStart ?? activeElement.value.length;
+                const end = activeElement.selectionEnd ?? activeElement.value.length;
                 let insertText = cleanText;
                 const placeholder = activeElement.getAttribute("placeholder") || "";
-                if (placeholder.includes("USERNAME")) {
-                  insertText = cleanText.toUpperCase().replace(/[^A-Z0-9]/g, "");
-                } else if (placeholder.includes("PASSWORD")) {
+                if (placeholder.includes("username")) {
+                  // preserve case for usernames (don't force uppercase)
+                  insertText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
+                } else if (placeholder.includes("password")) {
                   insertText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
                 }
                 const newValue = currentValue.slice(0, start) + insertText + currentValue.slice(end);
@@ -1422,7 +1424,8 @@ export default function App() {
               const field = activeFieldRef.current;
               let typedText = "";
               if (field === "username") {
-                typedText = cleanText.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                // preserve case for username input
+                typedText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
                 setUsername((prev) => (prev + typedText).slice(0, MAX_FIELD_LENGTH));
               } else if (field === "password") {
                 typedText = cleanText.replace(/[^a-zA-Z0-9]/g, "");
@@ -2444,15 +2447,17 @@ export default function App() {
                   usernameRef.current = e.target.value;
                 }}
                 onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Email or username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
-                placeholder="EMAIL OR USERNAME"
+                placeholder="Email or username"
+                style={{ textTransform: "none" }}
               />
             </label>
 
             <label className={activeField === "password" ? "field active" : "field"}>
               <span>Password</span>
+              {/* password input only */}
               <input
                 ref={passRef}
-                type="password"
+                type={showLoginPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => {
                   const next = e.target.value.slice(0, MAX_FIELD_LENGTH);
@@ -2460,9 +2465,34 @@ export default function App() {
                   passwordRef.current = next;
                 }}
                 onClick={() => { setActiveField("password"); setPendingField(null); setStatus("Password active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
-                placeholder="SPEECH OR TYPE PASSWORD"
+                placeholder="Speech or type password"
+                aria-label="Password"
+                style={{ textTransform: "none" }}
               />
             </label>
+
+            {/* big checkbox UNDERNEATH the password field and OUTSIDE the password label */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginTop: 14,
+                marginLeft: 4,        // aligns with inputs visually
+              }}
+            >
+              <input
+                id="show-login-password"
+                type="checkbox"
+                checked={showLoginPassword}
+                onChange={() => setShowLoginPassword(!showLoginPassword)}
+                aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                style={{ width: 32, height: 32 }} // visibly large checkbox
+              />
+              <label htmlFor="show-login-password" style={{ fontSize: 20, userSelect: "none" }}>
+                Show password
+              </label>
+            </div>
           </form>
 
           <div className="actions">
