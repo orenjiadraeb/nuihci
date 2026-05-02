@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProfilePictureUpload } from './ProfilePictureUpload';
 import { SettingsModal } from './SettingsModal';
+import { formatDisplayName } from '../utils/formatters.js';
 
 export const UserProfile = ({ user, onLogout, onProfileUpdate }) => {
   const [showSettings, setShowSettings] = useState(false);
@@ -63,7 +64,7 @@ export const UserProfile = ({ user, onLogout, onProfileUpdate }) => {
                 className="user-profile__name"
                 onClick={() => setEditingName(true)}
               >
-                {displayName}
+                {formatDisplayName(displayName)}
                 <span className="user-profile__edit-icon">✎</span>
               </h2>
             )}

@@ -1,4 +1,5 @@
 import React from "react";
+import { formatDisplayName } from "../utils/formatters.js";
 
 export default function ConversationList({
   conversations,
@@ -14,6 +15,7 @@ export default function ConversationList({
         {conversations.map((conversation) => {
           const lastMessage = conversation.messages?.[conversation.messages.length - 1] ?? {};
           const otherParticipant = conversation.participants?.find((participant) => participant !== "You") || "You";
+          const displayParticipant = formatDisplayName(otherParticipant);
           const online = onlineStatuses?.[otherParticipant] || "Offline";
           const isTyping = typingUsers?.includes(otherParticipant);
 
@@ -29,7 +31,7 @@ export default function ConversationList({
                 aria-current={conversation.id === activeConversationId ? "true" : "false"}
               >
                 <div className="conversation-title-row">
-                  <span className="conversation-title">{conversation.title}</span>
+                  <span className="conversation-title">{formatDisplayName(conversation.title)}</span>
                   <span className="conversation-time">{lastMessage.time || "—"}</span>
                 </div>
                 <div className="conversation-preview">

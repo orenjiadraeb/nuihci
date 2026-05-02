@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage, setOnlineStatus, updateGroupMembers, deleteGroupChat, getGroupMembers } from "./firebaseService";
+import { formatDisplayName } from "./utils/formatters.js";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -403,7 +404,7 @@ export default function App() {
       }
 
       setIsLoggedIn(true);
-      setStatus(`Login successful! Welcome back, ${profileData?.displayName || "User"}.`);
+      setStatus(`Login successful! Welcome back, ${formatDisplayName(profileData?.displayName || "User")}.`);
       
       // Set online status in Firestore
       try {
@@ -544,12 +545,12 @@ export default function App() {
     if (!currentUser?.uid) return;
     try {
       await sendFriendRequest(currentUser.uid, profile.name || currentUser.email, toUserId);
-      setStatus(`Friend request sent to ${toUsername}!`);
+      setStatus(`Friend request sent to ${formatDisplayName(toUsername)}!`);
       speak(`Friend request sent to ${toUsername}`);
       // Add outgoing notification
       addNotification({
         id: `friend-request-sent-${Date.now()}`,
-        text: `You sent a friend request to ${toUsername}`,
+        text: `You sent a friend request to ${formatDisplayName(toUsername)}`,
         type: 'friend-request-outgoing',
         toUsername: toUsername,
         timestamp: Date.now()
@@ -568,7 +569,7 @@ export default function App() {
       // Add notification
       addNotification({
         id: `friend-accepted-${Date.now()}`,
-        text: `You are now friends with ${fromUsername || 'a user'}`,
+        text: `You are now friends with ${formatDisplayName(fromUsername || 'a user')}`,
         type: 'friend-accepted',
         timestamp: Date.now()
       });
@@ -587,7 +588,7 @@ export default function App() {
       // Add notification
       addNotification({
         id: `friend-rejected-${Date.now()}`,
-        text: `You rejected friend request from ${fromUsername || 'a user'}`,
+        text: `You rejected friend request from ${formatDisplayName(fromUsername || 'a user')}`,
         type: 'friend-rejected',
         timestamp: Date.now()
       });
@@ -680,7 +681,7 @@ export default function App() {
       // Add friend requests to notifications as objects with actions
       const requestNotifications = requests.map(r => ({
         id: `friend-request-${r.id}`,
-        text: `Friend request from ${r.fromUsername}`,
+        text: `Friend request from ${formatDisplayName(r.fromUsername)}`,
         type: 'friend-request-incoming',
         requestId: r.id,
         fromUsername: r.fromUsername,
@@ -1155,7 +1156,7 @@ export default function App() {
     const clean = newFriendName.trim();
     if (!clean) return;
     if (friends.some((friend) => friend.toLowerCase() === clean.toLowerCase())) {
-      setStatus(`${clean} is already in your friends list.`);
+      setStatus(`${formatDisplayName(clean)} is already in your friends list.`);
       return;
     }
     const newConversation = {
@@ -1174,12 +1175,12 @@ export default function App() {
     setConversations((prev) => [...prev, newConversation]);
     addNotification({ 
       id: `friend-added-${Date.now()}`, 
-      text: `${clean} added to your friends list.`, 
+      text: `${formatDisplayName(clean)} added to your friends list.`, 
       timestamp: Date.now(), 
       type: 'friend-added' 
     });
     setNewFriendName("");
-    setStatus(`${clean} added as friend.`);
+    setStatus(`${formatDisplayName(clean)} added as friend.`);
     speak(`${clean} added as friend.`);
 
     if (db) {
@@ -1205,11 +1206,11 @@ export default function App() {
     }
     addNotification({ 
       id: `friend-removed-${Date.now()}`, 
-      text: `${friendName} removed from friends list.`, 
+      text: `${formatDisplayName(friendName)} removed from friends list.`, 
       timestamp: Date.now(), 
       type: 'friend-removed' 
     });
-    setStatus(`${friendName} removed from friends list.`);
+    setStatus(`${formatDisplayName(friendName)} removed from friends list.`);
   };
 
   const createGroupChat = async () => {
@@ -1363,7 +1364,7 @@ export default function App() {
     // Update Firestore
     try {
       await updateGroupMembers(activeConversationId, updatedUids, updatedNames);
-      setStatus(`${memberName} removed from group`);
+      setStatus(`${formatDisplayName(memberName)} removed from group`);
     } catch (error) {
       console.log("Failed to update group members:", error);
     }
@@ -2011,7 +2012,7 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <p className="profile-name">{profile.name}</p>
+                        <p className="profile-name">{formatDisplayName(profile.name)}</p>
                         <p className="profile-bio">{profile.biography}</p>
                       </>
                     )}
@@ -2135,9 +2136,9 @@ export default function App() {
                                 <div className="user-info">
                                   <img
                                     src={user.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                                    alt={user.displayName}
+                                    alt={formatDisplayName(user.displayName)}
                                   />
-                                  <span>{user.displayName || user.email?.split("@")[0]}</span>
+                                  <span>{formatDisplayName(user.displayName || user.email?.split("@")[0])}</span>
                                 </div>
                                 <button
                                   type="button"
@@ -2243,16 +2244,16 @@ export default function App() {
                                       }
                                     }
                                   }}
-                                  aria-label={`Chat with ${friend}`}
+                                  aria-label={`Chat with ${formatDisplayName(friend)}`}
                                 >
                                   <div className="profile-card-image">
                                     <img
                                       src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                                      alt={friend}
+                                      alt={formatDisplayName(friend)}
                                     />
                                     <span className={`status-dot ${friendStatus[friend]?.online ? "online" : "offline"}`} />
                                   </div>
-                                  <span className="profile-card-name">{friend}</span>
+                                  <span className="profile-card-name">{formatDisplayName(friend)}</span>
                                   {unreadCount > 0 && (
                                     <span className="message-badge">{unreadCount}</span>
                                   )}
@@ -2492,9 +2493,9 @@ export default function App() {
                       />
                       <img
                         src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                        alt={friend}
+                        alt={formatDisplayName(friend)}
                       />
-                      <span>{friend}</span>
+                      <span>{formatDisplayName(friend)}</span>
                     </label>
                   ))
                 )}
@@ -2591,11 +2592,11 @@ export default function App() {
                               >
                                 <img
                                   src={member.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                                  alt={member.isCurrentUser ? "You" : member.displayName}
+                                  alt={member.isCurrentUser ? "You" : formatDisplayName(member.displayName)}
                                   className="member-avatar"
                                 />
                                 <span className="member-name">
-                                  {member.isCurrentUser ? "You" : member.displayName}
+                                  {member.isCurrentUser ? "You" : formatDisplayName(member.displayName)}
                                 </span>
                                 {!member.isCurrentUser && (
                                   <button
@@ -2640,9 +2641,9 @@ export default function App() {
                               />
                               <img
                                 src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
-                                alt={friend}
+                                alt={formatDisplayName(friend)}
                               />
-                              <span>{friend}</span>
+                              <span>{formatDisplayName(friend)}</span>
                             </label>
                           ))}
                           {friends.filter(friend => !groupMembers.some(m => m.uid === friendStatus[friend]?.uid)).length === 0 && (

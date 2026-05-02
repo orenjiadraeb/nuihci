@@ -1,4 +1,5 @@
 import React from "react";
+import { formatDisplayName } from "../utils/formatters.js";
 
 export default function MessageItem({ message, isOwn, onReply }) {
   const readableType = message.type === "image" ? "image" : message.type === "file" ? "file" : "text";
@@ -14,7 +15,7 @@ export default function MessageItem({ message, isOwn, onReply }) {
         <img
           className="message-image"
           src={message.url}
-          alt={message.alt || `Image from ${message.sender}`}
+          alt={message.alt || `Image from ${formatDisplayName(message.sender)}`}
         />
       );
     }
@@ -36,13 +37,13 @@ export default function MessageItem({ message, isOwn, onReply }) {
   return (
     <li className={`message-item ${isOwn ? "message-own" : "message-remote"}`}>
       <div className="message-header">
-        <span className="message-sender">{message.sender}</span>
+        <span className="message-sender">{formatDisplayName(message.sender)}</span>
         <span className="message-time">{message.time}</span>
       </div>
 
       {message.replyTo && (
-        <div className="message-reply-preview" aria-label={`Reply to ${message.replyTo.sender}`}>
-          <span>{message.replyTo.sender}</span>
+        <div className="message-reply-preview" aria-label={`Reply to ${formatDisplayName(message.replyTo.sender)}`}>
+          <span>{formatDisplayName(message.replyTo.sender)}</span>
           <p>{message.replyTo.text}</p>
         </div>
       )}

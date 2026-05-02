@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebaseConfig.js";
+import { formatDisplayName } from "../utils/formatters.js";
 import ConversationList from "./ConversationList.jsx";
 import MessageItem from "./MessageItem.jsx";
 
@@ -308,11 +309,11 @@ export default function ChatInterface({
           <div>
             <h4>{activeChat?.title || "Select a conversation"}</h4>
             <p className="muted">
-              {activeChat?.participants?.join(", ")} • {firestoreEnabled ? "Firestore sync enabled" : "Local preview only"}
+              {activeChat?.participants?.map(formatDisplayName).join(", ")} • {firestoreEnabled ? "Firestore sync enabled" : "Local preview only"}
             </p>
           </div>
           <div className="typing-indicator" aria-live="polite">
-            {typingUsers.length > 0 ? `${typingUsers.join(", ")} typing…` : ""}
+            {typingUsers.length > 0 ? `${typingUsers.map(formatDisplayName).join(", ")} typing…` : ""}
           </div>
         </div>
 
