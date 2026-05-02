@@ -329,7 +329,7 @@ export default function App() {
 
   const handleLogin = async () => {
     const loginInput = String(username || usernameRef.current || "").trim();
-    const passwordValue = String(password || passwordRef.current || "").trim();
+    const passwordValue = normalizePassword(String(password || passwordRef.current || ""));
     if (!loginInput || !passwordValue) {
       setStatus("Enter your email/username and password to log in.");
       return;
@@ -475,8 +475,8 @@ export default function App() {
   const handleSignUp = async () => {
     const email = signUpEmail.trim();
     const displayName = signUpUsername.trim();
-    const password = signUpPassword;
-    const confirmPassword = signUpConfirmPassword;
+    const password = normalizePassword(signUpPassword);
+    const confirmPassword = normalizePassword(signUpConfirmPassword);
 
     if (!email || !displayName || !password || !confirmPassword) {
       setStatus("Please fill in all fields.");
@@ -2352,6 +2352,7 @@ export default function App() {
                     onChange={(e) => setSignUpEmail(e.target.value)}
                     placeholder="Enter your email"
                     aria-label="Email"
+                    autoComplete="off"
                   />
                 </label>
 
@@ -2363,49 +2364,32 @@ export default function App() {
                     onChange={(e) => setSignUpUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, MAX_FIELD_LENGTH))}
                     placeholder="Choose a username"
                     aria-label="Username"
+                    autoComplete="off"
                   />
                 </label>
 
                 <label className="field password-field">
                   <span>Password</span>
-                  <div className="password-input-wrapper">
-                    <input
-                      type={showSignUpPassword ? "text" : "password"}
-                      value={signUpPassword}
-                      onChange={(e) => setSignUpPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
-                      placeholder="Create a password"
-                      aria-label="Password"
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle"
-                      onClick={() => setShowSignUpPassword(!showSignUpPassword)}
-                      aria-label={showSignUpPassword ? "Hide password" : "Show password"}
-                    >
-                      {showSignUpPassword ? "🙈" : "👁️"}
-                    </button>
-                  </div>
+                  <input
+                    type="password"
+                    value={signUpPassword}
+                    onChange={(e) => setSignUpPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                    placeholder="Create a password"
+                    aria-label="Password"
+                    autoComplete="off"
+                  />
                 </label>
 
                 <label className="field password-field">
                   <span>Confirm Password</span>
-                  <div className="password-input-wrapper">
-                    <input
-                      type={showSignUpConfirmPassword ? "text" : "password"}
-                      value={signUpConfirmPassword}
-                      onChange={(e) => setSignUpConfirmPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
-                      placeholder="Re-enter your password"
-                      aria-label="Confirm Password"
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle"
-                      onClick={() => setShowSignUpConfirmPassword(!showSignUpConfirmPassword)}
-                      aria-label={showSignUpConfirmPassword ? "Hide password" : "Show password"}
-                    >
-                      {showSignUpConfirmPassword ? "🙈" : "👁️"}
-                    </button>
-                  </div>
+                  <input
+                    type="password"
+                    value={signUpConfirmPassword}
+                    onChange={(e) => setSignUpConfirmPassword(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                    placeholder="Re-enter your password"
+                    aria-label="Confirm Password"
+                    autoComplete="off"
+                  />
                 </label>
               </form>
 
@@ -2448,7 +2432,7 @@ export default function App() {
                 }}
                 onClick={() => { setActiveField("username"); setPendingField(null); setStatus("Email or username active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
                 placeholder="Email or username"
-                style={{ textTransform: "none" }}
+                style={{ textTransform: "uppercase" }}
               />
             </label>
 
@@ -2467,7 +2451,7 @@ export default function App() {
                 onClick={() => { setActiveField("password"); setPendingField(null); setStatus("Password active. Click, index up to speak, two palms to delete, or two thumbs up to login."); }}
                 placeholder="Speech or type password"
                 aria-label="Password"
-                style={{ textTransform: "none" }}
+                style={{ textTransform: "uppercase" }}
               />
             </label>
 

@@ -29,7 +29,9 @@ export async function signInEmail(email, password) {
 }
 
 export async function registerEmail(email, password, displayName) {
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  // Normalize password to lowercase for case-insensitive authentication
+  const normalizedPassword = String(password || "").trim().toLowerCase().replace(/\s+/g, "");
+  const credential = await createUserWithEmailAndPassword(auth, email, normalizedPassword);
   await updateProfile(credential.user, { displayName });
   
   // Try to create Firestore profile, but handle permission errors gracefully
