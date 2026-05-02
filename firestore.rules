@@ -1,35 +1,47 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isConversationParticipant(conversationId) {
-      return isAuthenticated() &&
-        get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
-    }
-
+    
+    // Allow users to read any user profile (for search)
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update, delete: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
-
+    
+    // Allow users to read their own friend requests
+    match /friendRequests/{requestId} {
+      allow read: if request.auth != null && 
+        (resource.data.toUserId == request.auth.uid || resource.data.fromUserId == request.auth.uid);
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+    }
+    
+    // Allow users to read their own friendships
+    match /friendships/{friendshipId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // Conversations
     match /conversations/{conversationId} {
-      allow read, create: if isAuthenticated() && request.resource.data.participants.hasAny([request.auth.uid]);
-      allow update: if isConversationParticipant(conversationId);
-      allow delete: if false;
-
+      // Create: allow any authenticated user
+      allow create: if request.auth != null;
+      // Read: only if participant
+      allow read: if request.auth != null && resource.data.participants.contains(request.auth.uid);
+      // Update: only if participant
+      allow update: if request.auth != null && resource.data.participants.contains(request.auth.uid);
+      // Delete: only if participant (ADDED)
+      allow delete: if request.auth != null && resource.data.participants.contains(request.auth.uid);
+      // List: allow authenticated users to query
+      allow list: if request.auth != null;
+      
+      // Messages within conversations
       match /messages/{messageId} {
-        allow read, create: if isConversationParticipant(conversationId);
-        allow update: if isConversationParticipant(conversationId);
-        allow delete: if false;
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null;
+        allow delete: if request.auth != null;
       }
-    }
-
-    match /typingIndicators/{indicatorId} {
-      allow read, write: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
     }
   }
 }

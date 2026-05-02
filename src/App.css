@@ -887,6 +887,260 @@
   border-color: rgba(239, 68, 68, 0.9);
 }
 
+/* Group Header Actions */
+.group-header-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.group-settings-btn {
+  padding: 8px 16px;
+  border: 2px solid rgba(129, 140, 248, 0.6);
+  background: rgba(129, 140, 248, 0.2);
+  color: #c7d2fe;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.group-settings-btn:hover {
+  background: rgba(129, 140, 248, 0.4);
+  border-color: rgba(129, 140, 248, 0.9);
+}
+
+/* Group Settings Modal */
+.group-settings-modal {
+  max-width: 450px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.group-settings-modal h3 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.group-settings-modal h4 {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  color: #a5b4fc;
+  font-weight: 500;
+}
+
+/* Tab Navigation */
+.group-settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
+}
+
+.settings-tab.active {
+  background: rgba(129, 140, 248, 0.25);
+  color: #c7d2fe;
+  border-bottom: 2px solid rgba(129, 140, 248, 0.6);
+  margin-bottom: -10px;
+}
+
+.settings-tab.active:hover {
+  background: rgba(129, 140, 248, 0.35);
+}
+
+/* Danger tab styling */
+.settings-tab:last-child {
+  color: #fca5a5;
+}
+
+.settings-tab:last-child:hover {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.settings-tab:last-child.active {
+  background: rgba(239, 68, 68, 0.2);
+  border-bottom-color: rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+}
+
+.group-settings-content {
+  min-height: 200px;
+}
+
+.group-settings-section {
+  margin-bottom: 24px;
+}
+
+.group-settings-section h5 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e7ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.group-members-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-member-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.member-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-member-item.current-user {
+  background: rgba(129, 140, 248, 0.15);
+  border: 1px solid rgba(129, 140, 248, 0.3);
+}
+
+.remove-member-btn {
+  padding: 6px 12px;
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remove-member-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.8);
+}
+
+.add-members-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.add-members-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: 2px solid rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-members-btn:hover {
+  background: rgba(34, 197, 94, 0.3);
+  border-color: rgba(34, 197, 94, 0.8);
+}
+
+.danger-section h5 {
+  color: #fca5a5;
+}
+
+.delete-group-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete-group-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  border-color: rgba(239, 68, 68, 0.9);
+}
+
+.danger-hint {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.loading-text,
+.empty-text {
+  text-align: center;
+  color: #9ca3af;
+  font-style: italic;
+  padding: 16px;
+}
+
+.group-settings-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.group-settings-actions button {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.group-settings-actions button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .profile-media-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage, setOnlineStatus } from "./firebaseService";
+import { signInEmail, registerEmail, signInWithGoogle, signOutUser, getUserProfile, sendVerificationEmail, getUserByUsername, searchUsers, sendFriendRequest, getFriendRequests, acceptFriendRequest, rejectFriendRequest, getFriends, unfriend, createConversation, getConversations, listenToMessages, listenToConversations, postMessage, setOnlineStatus, updateGroupMembers, deleteGroupChat, getGroupMembers } from "./firebaseService";
 import "@mediapipe/camera_utils/camera_utils.js";
 import "@mediapipe/hands/hands.js";
 import "@mediapipe/face_mesh/face_mesh.js";
@@ -212,6 +212,13 @@ export default function App() {
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
   const [showGroupMemberSelect, setShowGroupMemberSelect] = useState(false);
+  
+  // Group settings state
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
+  const [groupSettingsTab, setGroupSettingsTab] = useState("members"); // "members", "add", "danger"
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [groupMembersToAdd, setGroupMembersToAdd] = useState([]);
+  const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false);
   
   // Friend search and request state
   const [searchQuery, setSearchQuery] = useState("");
@@ -979,6 +986,8 @@ export default function App() {
               type: convo.type,
               title: convo.title,
               participants: convo.participants,
+              participantUids: convo.participants, // UIDs from Firestore
+              participantNames: convo.participantNames || convo.participants?.map((_, i) => `Member ${i + 1}`) || [],
               messages: [],
             }];
           }
@@ -1219,10 +1228,14 @@ export default function App() {
       return;
     }
 
-    // Get participant UIDs
+    // Get participant UIDs and names
     const participantUids = selectedGroupMembers.map(m => friendStatus[m]?.uid).filter(Boolean);
+    const participantNames = [...selectedGroupMembers];
+
+    // Add current user to both arrays (at the beginning to match index alignment)
     if (currentUser) {
-      participantUids.push(currentUser.uid);
+      participantUids.unshift(currentUser.uid);
+      participantNames.unshift(profile.name || currentUser.displayName || currentUser.email?.split("@")[0] || "You");
     }
 
     const newConversation = {
@@ -1231,6 +1244,7 @@ export default function App() {
       title: `Group: ${clean}`,
       participants: ["You", ...selectedGroupMembers],
       participantUids, // Store UIDs for Firestore
+      participantNames, // Store display names (aligned with participantUids)
       messages: [],
     };
 
@@ -1242,11 +1256,10 @@ export default function App() {
     setShowChat(true);
     addNotification({ 
       id: `group-created-${Date.now()}`, 
-      text: `Group chat "${clean}" created.`, 
-      timestamp: Date.now(), 
-      type: 'group-created' 
+      type: 'group-created',
+      text: `Group "${clean}" created with ${selectedGroupMembers.length} members.`,
+      timestamp: Date.now(),
     });
-    setStatus(`Created group chat: ${clean}`);
     speak(`Group chat ${clean} created.`);
 
     // Store in Firestore
@@ -1257,6 +1270,7 @@ export default function App() {
           type: "group",
           title: `Group: ${clean}`,
           participants: participantUids,
+          participantNames: participantNames, // Store display names (aligned with UIDs)
         });
       } catch (error) {
         console.log("Failed to create group in Firestore:", error);
@@ -1279,6 +1293,177 @@ export default function App() {
     });
     setStatus(`Left ${groupTitle}`);
     speak(`You left the group`);
+  };
+
+  // Group Settings Functions
+  const openGroupSettings = async () => {
+    if (!activeConversationId) return;
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation || conversation.type !== "group") return;
+    
+    setShowGroupSettings(true);
+    setGroupSettingsTab("members");
+    setIsLoadingGroupMembers(true);
+    setGroupMembersToAdd([]);
+    
+    try {
+      // Get current members from Firestore with their display names
+      const members = await getGroupMembers(activeConversationId);
+      setGroupMembers(members);
+    } catch (error) {
+      console.log("Failed to load group members:", error);
+      // Fallback to local data
+      const localMembers = conversation.participants
+        ?.filter(p => p !== "You")
+        ?.map(name => ({
+          uid: friendStatus[name]?.uid || name,
+          displayName: name,
+          photoURL: friendStatus[name]?.picture || "",
+        })) || [];
+      setGroupMembers(localMembers);
+    } finally {
+      setIsLoadingGroupMembers(false);
+    }
+  };
+
+  const handleRemoveGroupMember = async (memberUid, memberName) => {
+    if (!activeConversationId || !currentUser?.uid) return;
+
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation) return;
+
+    // Get current participant arrays
+    const currentUids = conversation.participantUids || [];
+    const currentNames = conversation.participantNames || [];
+
+    // Find the index of the member to remove
+    const removeIndex = currentUids.findIndex(uid => uid === memberUid);
+    if (removeIndex === -1) return;
+
+    // Remove from both arrays by index to maintain alignment
+    const updatedUids = currentUids.filter((_, i) => i !== removeIndex);
+    const updatedNames = currentNames.filter((_, i) => i !== removeIndex);
+
+    // Update local state
+    setGroupMembers(prev => prev.filter(m => m.uid !== memberUid));
+
+    // Update conversation state
+    setConversations(prev => prev.map(c => {
+      if (c.id === activeConversationId) {
+        return {
+          ...c,
+          participants: c.participants.filter(p => p !== memberName),
+          participantUids: updatedUids,
+          participantNames: updatedNames,
+        };
+      }
+      return c;
+    }));
+
+    // Update Firestore
+    try {
+      await updateGroupMembers(activeConversationId, updatedUids, updatedNames);
+      setStatus(`${memberName} removed from group`);
+    } catch (error) {
+      console.log("Failed to update group members:", error);
+    }
+  };
+
+  const handleAddGroupMembers = async () => {
+    if (!activeConversationId || groupMembersToAdd.length === 0) return;
+
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation) return;
+
+    // Get UIDs and names of friends to add
+    const newMemberUids = groupMembersToAdd.map(name => friendStatus[name]?.uid).filter(Boolean);
+    const newMemberNames = groupMembersToAdd;
+
+    // Get current members (use participantNames if available, fallback to deriving from participants)
+    const currentUids = conversation.participantUids || [];
+    const currentNames = conversation.participantNames || conversation.participants?.filter(p => p !== "You") || [];
+
+    // Merge arrays (maintaining alignment)
+    const updatedUids = [...currentUids, ...newMemberUids];
+    const updatedNames = [...currentNames, ...newMemberNames];
+
+    // Update local state
+    const newMembers = groupMembersToAdd.map(name => ({
+      uid: friendStatus[name]?.uid,
+      displayName: name,
+      photoURL: friendStatus[name]?.picture || "",
+    }));
+    setGroupMembers(prev => [...prev, ...newMembers]);
+    setGroupMembersToAdd([]);
+
+    // Update conversation state
+    setConversations(prev => prev.map(c => {
+      if (c.id === activeConversationId) {
+        return {
+          ...c,
+          participants: ["You", ...updatedNames],
+          participantUids: updatedUids,
+          participantNames: updatedNames,
+        };
+      }
+      return c;
+    }));
+
+    // Update Firestore
+    try {
+      await updateGroupMembers(activeConversationId, updatedUids, updatedNames);
+      setStatus(`${newMemberNames.length} member(s) added to group`);
+    } catch (error) {
+      console.log("Failed to add group members:", error);
+    }
+  };
+
+  const handleDeleteGroupChat = async () => {
+    if (!activeConversationId) return;
+    
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation) return;
+    
+    const groupName = conversation.title?.replace("Group: ", "") || "this group";
+    
+    if (!window.confirm(`Delete "${groupName}" for everyone? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      // Delete from Firestore
+      await deleteGroupChat(activeConversationId);
+      
+      // Update local state
+      setConversations(prev => prev.filter(c => c.id !== activeConversationId));
+      setActiveConversationId("");
+      setShowChat(false);
+      setShowGroupSettings(false);
+      
+      addNotification({ 
+        id: `group-deleted-${Date.now()}`, 
+        text: `Group "${groupName}" deleted.`, 
+        timestamp: Date.now(), 
+        type: 'group-deleted' 
+      });
+      setStatus(`Group "${groupName}" deleted`);
+      speak(`Group ${groupName} deleted`);
+    } catch (error) {
+      console.log("Failed to delete group:", error);
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("permission") || errorMsg.includes("Permission")) {
+        setStatus("Failed to delete: Insufficient permissions. Check Firestore rules.");
+      } else if (errorMsg.includes("not-found")) {
+        setStatus("Group already deleted or does not exist.");
+        // Clean up local state anyway
+        setConversations(prev => prev.filter(c => c.id !== activeConversationId));
+        setActiveConversationId("");
+        setShowChat(false);
+        setShowGroupSettings(false);
+      } else {
+        setStatus(`Failed to delete: ${errorMsg.slice(0, 50)}`);
+      }
+    }
   };
 
   const sendMessage = async (payload) => {
@@ -2174,13 +2359,22 @@ export default function App() {
                             Unfriend
                           </button>
                         ) : (
-                          <button
-                            type="button"
-                            className="leave-group-btn"
-                            onClick={() => leaveGroupChat(activeConversationId)}
-                          >
-                            Leave Group
-                          </button>
+                          <div className="group-header-actions">
+                            <button
+                              type="button"
+                              className="group-settings-btn"
+                              onClick={openGroupSettings}
+                            >
+                              Group Settings
+                            </button>
+                            <button
+                              type="button"
+                              className="leave-group-btn"
+                              onClick={() => leaveGroupChat(activeConversationId)}
+                            >
+                              Leave Group
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -2315,6 +2509,177 @@ export default function App() {
                   Create Group ({selectedGroupMembers.length} selected)
                 </button>
                 <button type="button" onClick={() => setShowGroupMemberSelect(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showGroupSettings && (
+          <div className="camera-modal-overlay" onClick={() => setShowGroupSettings(false)}>
+            <div className="camera-modal group-settings-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Group Settings</h3>
+              <h4>{activeConversation?.title?.replace("Group: ", "") || "Group"}</h4>
+              
+              {/* Tab Navigation */}
+              <div className="group-settings-tabs">
+                <button
+                  type="button"
+                  className={`settings-tab ${groupSettingsTab === "members" ? "active" : ""}`}
+                  onClick={() => setGroupSettingsTab("members")}
+                >
+                  Members ({groupMembers.length})
+                </button>
+                <button
+                  type="button"
+                  className={`settings-tab ${groupSettingsTab === "add" ? "active" : ""}`}
+                  onClick={() => setGroupSettingsTab("add")}
+                >
+                  Add Members
+                </button>
+                <button
+                  type="button"
+                  className={`settings-tab ${groupSettingsTab === "danger" ? "active" : ""}`}
+                  onClick={() => setGroupSettingsTab("danger")}
+                >
+                  Danger
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="group-settings-content">
+                {groupSettingsTab === "members" && (
+                  <div className="group-settings-section">
+                    <h5>Current Members</h5>
+                    {isLoadingGroupMembers ? (
+                      <p className="loading-text">Loading members...</p>
+                    ) : (
+                      (() => {
+                        // Add current user to the list if not present
+                        const currentUserUid = currentUser?.uid;
+                        const currentUserInList = groupMembers.some(m => m.uid === currentUserUid);
+                        
+                        let allMembers = [...groupMembers];
+                        if (!currentUserInList && currentUserUid) {
+                          allMembers.unshift({
+                            uid: currentUserUid,
+                            displayName: profile.name || currentUser.email?.split("@")[0] || "You",
+                            photoURL: profile.picture || currentUser.photoURL || "",
+                            isCurrentUser: true,
+                          });
+                        }
+                        
+                        // Mark current user and sort (current user first)
+                        allMembers = allMembers.map(m => ({
+                          ...m,
+                          isCurrentUser: m.uid === currentUserUid,
+                        })).sort((a, b) => {
+                          if (a.isCurrentUser) return -1;
+                          if (b.isCurrentUser) return 1;
+                          return a.displayName.localeCompare(b.displayName);
+                        });
+                        
+                        if (allMembers.length === 0) {
+                          return <p className="empty-text">No members in this group.</p>;
+                        }
+                        
+                        return (
+                          <ul className="group-members-list">
+                            {allMembers.map((member) => (
+                              <li 
+                                key={member.uid} 
+                                className={`group-member-item ${member.isCurrentUser ? "current-user" : ""}`}
+                              >
+                                <img
+                                  src={member.photoURL || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                  alt={member.isCurrentUser ? "You" : member.displayName}
+                                  className="member-avatar"
+                                />
+                                <span className="member-name">
+                                  {member.isCurrentUser ? "You" : member.displayName}
+                                </span>
+                                {!member.isCurrentUser && (
+                                  <button
+                                    type="button"
+                                    className="remove-member-btn"
+                                    onClick={() => handleRemoveGroupMember(member.uid, member.displayName)}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()
+                    )}
+                  </div>
+                )}
+
+                {groupSettingsTab === "add" && (
+                  <div className="group-settings-section">
+                    <h5>Add Members to Group</h5>
+                    {friends.length === 0 ? (
+                      <p className="empty-text">No friends to add.</p>
+                    ) : (
+                      <>
+                        <div className="member-select-list add-members-list">
+                          {friends
+                            .filter(friend => !groupMembers.some(m => m.uid === friendStatus[friend]?.uid))
+                            .map((friend) => (
+                            <label key={friend} className="member-select-item">
+                              <input
+                                type="checkbox"
+                                checked={groupMembersToAdd.includes(friend)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setGroupMembersToAdd((prev) => [...prev, friend]);
+                                  } else {
+                                    setGroupMembersToAdd((prev) => prev.filter((f) => f !== friend));
+                                  }
+                                }}
+                              />
+                              <img
+                                src={friendStatus[friend]?.picture || "https://media.istockphoto.com/id/512830984/photo/icon-man-on-a-white-background-3d-render.webp?b=1&s=612x612&w=0&k=20&c=XApNjZNyiu4Oc-xGxtRLOsxIvtsZtL3jZRTOxv4G-NM="}
+                                alt={friend}
+                              />
+                              <span>{friend}</span>
+                            </label>
+                          ))}
+                          {friends.filter(friend => !groupMembers.some(m => m.uid === friendStatus[friend]?.uid)).length === 0 && (
+                            <p className="empty-text">All friends are already in this group.</p>
+                          )}
+                        </div>
+                        {groupMembersToAdd.length > 0 && (
+                          <button
+                            type="button"
+                            className="add-members-btn"
+                            onClick={handleAddGroupMembers}
+                          >
+                            Add {groupMembersToAdd.length} Member(s)
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {groupSettingsTab === "danger" && (
+                  <div className="group-settings-section danger-section">
+                    <h5>Danger Zone</h5>
+                    <button
+                      type="button"
+                      className="delete-group-btn"
+                      onClick={handleDeleteGroupChat}
+                    >
+                      Delete Group for Everyone
+                    </button>
+                    <p className="danger-hint">This will permanently delete the group and all messages for all members.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="group-settings-actions">
+                <button type="button" onClick={() => setShowGroupSettings(false)}>Close</button>
               </div>
             </div>
           </div>

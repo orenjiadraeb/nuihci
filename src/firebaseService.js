@@ -370,3 +370,80 @@ export function listenToConversations(userId, callback) {
     callback(conversations);
   });
 }
+
+// Group Management Functions
+
+export async function updateGroupMembers(conversationId, participantUids, participantNames) {
+  if (!conversationId) throw new Error("Conversation ID required");
+  const convoRef = doc(db, "conversations", conversationId);
+  await updateDoc(convoRef, {
+    participants: participantUids,
+    participantNames: participantNames,
+    updatedAt: serverTimestamp(),
+  });
+  return true;
+}
+
+export async function deleteGroupChat(conversationId) {
+  if (!conversationId) throw new Error("Conversation ID required");
+  
+  // Delete all messages in the conversation
+  const messagesRef = collection(db, "conversations", conversationId, "messages");
+  const messagesSnapshot = await getDocs(messagesRef);
+  const deleteMessagePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+  await Promise.all(deleteMessagePromises);
+  
+  // Delete the conversation document
+  const convoRef = doc(db, "conversations", conversationId);
+  await deleteDoc(convoRef);
+  
+  return true;
+}
+
+export async function getGroupMembers(conversationId) {
+  if (!conversationId) return [];
+  const convoRef = doc(db, "conversations", conversationId);
+  const snapshot = await getDoc(convoRef);
+  if (!snapshot.exists()) return [];
+
+  const data = snapshot.data();
+  const participantUids = data.participants || [];
+  const participantNames = data.participantNames || [];
+
+  // Build a map of UID to stored name for fallback
+  const nameMap = {};
+  participantUids.forEach((uid, index) => {
+    nameMap[uid] = participantNames[index];
+  });
+
+  // Fetch user profiles for each participant
+  const members = [];
+  for (const uid of participantUids) {
+    let displayName = nameMap[uid];
+    let photoURL = "";
+
+    // Try to get profile data for accurate name and photo
+    try {
+      const profile = await getUserProfile(uid);
+      if (profile) {
+        displayName = profile.displayName || profile.email?.split("@")[0] || displayName || "Unknown";
+        photoURL = profile.photoURL || "";
+      } else if (!displayName) {
+        // If no profile and no stored name, use shortened UID
+        displayName = uid.slice(0, 8) + "...";
+      }
+    } catch (error) {
+      // If profile lookup fails, use stored name or shortened UID
+      if (!displayName) {
+        displayName = uid.slice(0, 8) + "...";
+      }
+    }
+
+    members.push({
+      uid,
+      displayName,
+      photoURL,
+    });
+  }
+  return members;
+}
